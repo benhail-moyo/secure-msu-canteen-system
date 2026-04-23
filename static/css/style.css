@@ -1,8 +1,8 @@
 /* MSU Canteen - Custom Styles */
 :root {
-    --msu-purple: #2600ff;
+    --msu-purple: #6B2D8C;
     --msu-gold: #FFD700;
-    --primary-color: #1f04b9;
+    --primary-color: #6B2D8C;
 }
 
 body {
@@ -189,12 +189,4 @@ body {
 .table {
     border-radius: 10px;
     overflow: hidden;
-}
-/* Constrain the MSU Logo size */
-.msu-logo {
-    max-width: 250px; /* Adjust this number to your liking */
-    height: auto;     /* Maintains the aspect ratio */
-    display: block;
-    margin: 0 auto;   /* Centers the image within the div */
-    margin-bottom: 20px;
 }
