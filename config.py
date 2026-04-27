@@ -20,6 +20,14 @@ class Config:
     MANAGER_KEY = os.environ.get("MANAGER_KEY", "MSUmanagerSpecial")
     STAFF_KEY = os.environ.get("STAFF_KEY", "MSUstaffSpecial")
 
+    # Email configuration for 2FA
+    MAIL_SERVER = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
+    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "True").lower() == "true"
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "benhailelpadrey@gmail.com")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "tnqa hesa livx bjxu")
+    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER") or MAIL_USERNAME
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

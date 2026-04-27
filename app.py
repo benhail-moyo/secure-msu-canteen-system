@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, render_template_string
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import inspect, text
 from datetime import datetime, timedelta
 import os
 import random
@@ -8,6 +10,8 @@ import string
 
 from config import config
 from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback
+
+mail = Mail()
 
 
 def create_app(config_name=None):
@@ -20,6 +24,7 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
 
     db.init_app(app)
+    mail.init_app(app)
 
     login_manager = LoginManager()
     login_manager.init_app(app)
@@ -30,7 +35,10 @@ def create_app(config_name=None):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return Student.query.get(int(user_id))
+            student = Student.query.get(int(user_id))
+            if student and student.is_verified:
+                return student
+            return None
         except (ValueError, TypeError):
             return None
 
@@ -38,13 +46,46 @@ def create_app(config_name=None):
 
     with app.app_context():
         db.create_all()
+        ensure_student_verified_column(app)
         seed_database()
 
     return app
 
 
+def ensure_student_verified_column(app):
+    """Ensure is_verified column exists in students table for backwards compatibility."""
+    try:
+        inspector = inspect(db.engine)
+        if "students" in inspector.get_table_names():
+            columns = [col["name"] for col in inspector.get_columns("students")]
+            if "is_verified" not in columns:
+                with db.engine.begin() as connection:
+                    connection.execute(text("ALTER TABLE students ADD COLUMN is_verified BOOLEAN DEFAULT 0"))
+    except Exception as e:
+        app.logger.warning(f"Could not ensure is_verified column: {e}")
+
+
 def register_routes(app):
     """Register all application routes."""
+
+    def send_2fa_email(email, code):
+        """Send 2FA verification code via email."""
+        if not app.config.get("MAIL_USERNAME") or not app.config.get("MAIL_PASSWORD"):
+            app.logger.warning("Email credentials are not configured; dropping 2FA email and printing code to console.")
+            print(f"[2FA DEBUG] Send code to {email}: {code}")
+            return True
+
+        msg = Message(
+            subject="Your 2FA Verification Code",
+            recipients=[email],
+            body=f"Your verification code is: {code}\n\nPlease enter this code to complete your registration."
+        )
+        try:
+            mail.send(msg)
+            return True
+        except Exception as exc:
+            app.logger.error("Failed to send 2FA email: %s", exc)
+            return False
 
     @app.route("/")
     def index():
@@ -65,8 +106,14 @@ def register_routes(app):
             department = request.form.get("department")
             phone = request.form.get("phone")
 
+            confirm_password = request.form.get("confirm_password")
+
             if not student_id or not name or not email or not password:
                 flash("Please fill in all required fields.", "danger")
+                return render_template("register.html")
+
+            if password != confirm_password:
+                flash("Passwords do not match.", "danger")
                 return render_template("register.html")
 
             if Student.query.filter_by(student_id=student_id).first():
@@ -84,16 +131,56 @@ def register_routes(app):
                 password_hash=generate_password_hash(password),
                 department=department,
                 phone=phone,
-                role="student"
+                role="student",
+                is_verified=False
             )
 
             db.session.add(student)
             db.session.commit()
 
-            flash("Registration successful! Please log in.", "success")
-            return redirect(url_for("login"))
+            # Generate 2FA code
+            code = ''.join(random.choices(string.digits, k=6))
+            session['2fa_code'] = code
+            session['pending_user_id'] = student.id
+
+            # Send verification email
+            if not send_2fa_email(student.email, code):
+                flash("Unable to send verification email right now. Please try again later.", "danger")
+                return render_template("register.html")
+
+            flash("Registration successful! Please check your email for the verification code.", "success")
+            return redirect(url_for("verify_2fa"))
 
         return render_template("register.html")
+
+    @app.route("/verify-2fa", methods=["GET", "POST"])
+    def verify_2fa():
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        if 'pending_user_id' not in session or '2fa_code' not in session:
+            flash("No pending verification. Please register first.", "danger")
+            return redirect(url_for("register"))
+
+        if request.method == "POST":
+            entered_code = request.form.get("code")
+            if entered_code == session['2fa_code']:
+                user_id = session['pending_user_id']
+                student = Student.query.get(user_id)
+                if student:
+                    student.is_verified = True
+                    db.session.commit()
+                    session.pop('2fa_code', None)
+                    session.pop('pending_user_id', None)
+                    login_user(student)
+                    flash("Verification successful! Welcome!", "success")
+                    return redirect_user_by_role(student)
+                else:
+                    flash("User not found.", "danger")
+            else:
+                flash("Invalid verification code.", "danger")
+
+        return render_template("verify_2fa.html")
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -111,6 +198,16 @@ def register_routes(app):
                 student = Student.query.filter_by(student_id=student_id, role="student").first()
 
             if student and check_password_hash(student.password_hash, password):
+                if not student.is_verified:
+                    # Generate new 2FA code for unverified user
+                    code = ''.join(random.choices(string.digits, k=6))
+                    session['2fa_code'] = code
+                    session['pending_user_id'] = student.id
+                    if not send_2fa_email(student.email, code):
+                        flash("Unable to send verification email right now. Please try again later.", "danger")
+                        return render_template("login.html")
+                    flash("Please verify your account first. Check your email for the code.", "warning")
+                    return redirect(url_for("verify_2fa"))
                 login_user(student)
                 flash("Logged in successfully!", "success")
                 return redirect_user_by_role(student)

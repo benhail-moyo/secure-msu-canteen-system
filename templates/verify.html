@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Verify Identity - MSU Canteen{% endblock %}
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card border-0 shadow">
+                <div class="card-body p-5">
+                    <h2 class="text-center mb-4"><i class="fas fa-shield-alt text-primary me-2"></i>Verify Your Identity</h2>
+                    <p class="text-center text-muted mb-4">We've sent a verification code to your email. Please enter it below.</p>
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="code" class="form-label">Verification Code</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-key"></i></span>
+                                <input type="text" class="form-control" id="code" name="code" maxlength="6" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check me-2"></i>Verify</button>
+                    </form>
+                    <hr>
+                    <p class="text-center mb-0"><a href="{{ url_for('login') }}">Back to Login</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -28,7 +28,7 @@ class Student(UserMixin, db.Model):
 
     is_active = db.Column(db.Boolean, default=True)
 
-    orders = db.relationship("Order", backref="student", lazy="dynamic")
+    is_verified = db.Column(db.Boolean, default=False)
 
     def __repr__(self):
         return f"<Student {self.email} - {self.role}>"

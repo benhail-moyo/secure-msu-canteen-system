@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Verify 2FA - MSU Canteen{% endblock %}
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow">
+                <div class="card-body p-5">
+                    <h2 class="text-center mb-4"><i class="fas fa-shield-alt text-primary me-2"></i>Verify Your Account</h2>
+                    <p class="text-center text-muted mb-4">We've sent a 6-digit verification code to your email. Please enter it below to complete your registration.</p>
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="code" class="form-label">Verification Code</label>
+                            <input type="text" class="form-control text-center" id="code" name="code" required maxlength="6" pattern="[0-9]{6}" placeholder="000000">
+                            <small class="text-muted">Enter the 6-digit code from your email</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check me-2"></i>Verify Code</button>
+                    </form>
+                    <hr>
+                    <p class="text-center mb-0">Didn't receive the code? <a href="{{ url_for('register') }}">Try registering again</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
