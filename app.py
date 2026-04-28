@@ -76,9 +76,10 @@ def register_routes(app):
             return True
 
         msg = Message(
-            subject="Your 2FA Verification Code",
+            subject="Your MSU Canteen Account Verification Code",
             recipients=[email],
-            body=f"Your verification code is: {code}\n\nPlease enter this code to complete your registration."
+            body=f"Your verification code is: {code}\n\nPlease enter this code in the "
+            f"verification page to complete your registration."
         )
         try:
             mail.send(msg)

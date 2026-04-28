@@ -24,9 +24,9 @@ class Config:
     # Port 465 uses implicit SSL (MAIL_USE_SSL=True).
     # Port 587 uses STARTTLS (MAIL_USE_TLS=True). Never mix the two.
     MAIL_SERVER = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.environ.get("MAIL_PORT", 465))
-    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "True").lower() == "true"   # port 465 = SSL
-    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "False").lower() == "true"  # port 587 = TLS
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
+    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "False").lower() == "true"   # port 465 = SSL
+    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "True").lower() == "true"  # port 587 = TLS
     MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "benhailelpadrey@gmail.com")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "tnqa hesa livx bjxu")
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER") or MAIL_USERNAME
