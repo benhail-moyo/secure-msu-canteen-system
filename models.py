@@ -30,6 +30,10 @@ class Student(UserMixin, db.Model):
 
     is_verified = db.Column(db.Boolean, default=False)
 
+    last_login_at = db.Column(db.DateTime)
+
+    last_2fa_at = db.Column(db.DateTime)
+
     def __repr__(self):
         return f"<Student {self.email} - {self.role}>"
 

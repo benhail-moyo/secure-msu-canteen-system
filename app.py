@@ -13,6 +13,19 @@ from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback
 
 mail = Mail()
 
+STALE_LOGIN_2FA_DAYS = 7
+HIGH_VALUE_ORDER_LIMIT = 100
+COMMON_WEAK_PASSWORDS = {
+    "password",
+    "password1",
+    "123456",
+    "12345678",
+    "qwerty",
+    "admin",
+    "letmein",
+    "welcome",
+}
+
 
 def create_app(config_name=None):
     """Create and configure the Flask application."""
@@ -46,29 +59,115 @@ def create_app(config_name=None):
 
     with app.app_context():
         db.create_all()
-        ensure_student_verified_column(app)
+        sync_database_schema(app)
         seed_database()
 
     return app
 
 
-def ensure_student_verified_column(app):
-    """Ensure is_verified column exists in students table for backwards compatibility."""
+def sync_database_schema(app):
+    """Add model columns that are missing from existing database tables."""
     try:
         inspector = inspect(db.engine)
-        if "students" in inspector.get_table_names():
-            columns = [col["name"] for col in inspector.get_columns("students")]
+        existing_tables = inspector.get_table_names()
+
+        if "students" in existing_tables:
+            columns = {col["name"] for col in inspector.get_columns("students")}
             if "is_verified" not in columns:
                 with db.engine.begin() as connection:
                     connection.execute(text("ALTER TABLE students ADD COLUMN is_verified BOOLEAN DEFAULT 0"))
+            if "last_login_at" not in columns:
+                with db.engine.begin() as connection:
+                    connection.execute(text("ALTER TABLE students ADD COLUMN last_login_at DATETIME"))
+            if "last_2fa_at" not in columns:
+                with db.engine.begin() as connection:
+                    connection.execute(text("ALTER TABLE students ADD COLUMN last_2fa_at DATETIME"))
+
+        inspector = inspect(db.engine)
+        for table in db.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+
+            columns = {col["name"] for col in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in columns or column.primary_key:
+                    continue
+                add_column_to_table(table.name, column)
     except Exception as e:
-        app.logger.warning(f"Could not ensure is_verified column: {e}")
+        app.logger.warning(f"Could not sync database schema: {e}")
+
+
+def add_column_to_table(table_name, column):
+    """Add a missing model column to a SQLite table without making the DB read-only."""
+    preparer = db.engine.dialect.identifier_preparer
+    column_type = column.type.compile(dialect=db.engine.dialect)
+    sql = (
+        f"ALTER TABLE {preparer.quote(table_name)} "
+        f"ADD COLUMN {preparer.quote(column.name)} {column_type}"
+    )
+
+    if column.server_default is not None:
+        default_sql = str(column.server_default.arg)
+        sql += f" DEFAULT {default_sql}"
+        if not column.nullable:
+            sql += " NOT NULL"
+
+    with db.engine.begin() as connection:
+        connection.execute(text(sql))
+
+
+def evaluate_password_strength(password, student_id=None, name=None, email=None):
+    """Return password strength and practical feedback for registration."""
+    feedback = []
+    score = 0
+    normalized_password = (password or "").lower()
+
+    if len(password) >= 12:
+        score += 2
+    elif len(password) >= 8:
+        score += 1
+    else:
+        feedback.append("use at least 8 characters")
+
+    checks = [
+        (any(char.islower() for char in password), "add lowercase letters"),
+        (any(char.isupper() for char in password), "add uppercase letters"),
+        (any(char.isdigit() for char in password), "add at least one number"),
+        (any(not char.isalnum() for char in password), "add a special character"),
+    ]
+
+    for passed, message in checks:
+        if passed:
+            score += 1
+        else:
+            feedback.append(message)
+
+    personal_values = [student_id, name, email.split("@")[0] if email and "@" in email else email]
+    for value in personal_values:
+        value = (value or "").strip().lower()
+        if value and len(value) >= 3 and value in normalized_password:
+            score -= 1
+            feedback.append("avoid using your name, student ID, or email in the password")
+            break
+
+    if normalized_password in COMMON_WEAK_PASSWORDS:
+        score = 0
+        feedback.append("avoid common passwords")
+
+    if score >= 6:
+        strength = "Strong"
+    elif score >= 4:
+        strength = "Medium"
+    else:
+        strength = "Weak"
+
+    return strength, sorted(set(feedback))
 
 
 def register_routes(app):
     """Register all application routes."""
 
-    def send_2fa_email(email, code):
+    def send_2fa_email(email, code, purpose="verify your account"):
         """Send 2FA verification code via email."""
         if not app.config.get("MAIL_USERNAME") or not app.config.get("MAIL_PASSWORD"):
             app.logger.warning("Email credentials are not configured; dropping 2FA email and printing code to console.")
@@ -78,8 +177,7 @@ def register_routes(app):
         msg = Message(
             subject="Your MSU Canteen Account Verification Code",
             recipients=[email],
-            body=f"Your verification code is: {code}\n\nPlease enter this code in the "
-            f"verification page to complete your registration."
+            body=f"Your verification code is: {code}\n\nPlease enter this code to {purpose}."
         )
         try:
             mail.send(msg)
@@ -87,6 +185,68 @@ def register_routes(app):
         except Exception as exc:
             app.logger.error("Failed to send 2FA email: %s", exc)
             return False
+
+    def start_2fa(student, purpose, message, **extra_session_data):
+        """Start an email 2FA challenge for a specific purpose."""
+        code = ''.join(random.choices(string.digits, k=6))
+        session['2fa_code'] = code
+        session['2fa_purpose'] = purpose
+        session['pending_user_id'] = student.id
+        for key, value in extra_session_data.items():
+            session[key] = value
+
+        if not send_2fa_email(student.email, code, message.lower()):
+            session.pop('2fa_code', None)
+            session.pop('2fa_purpose', None)
+            session.pop('pending_user_id', None)
+            for key in extra_session_data:
+                session.pop(key, None)
+            return False
+        return True
+
+    def is_stale_login(student):
+        """Require 2FA when the previous login was at least a week ago."""
+        if not student.last_login_at:
+            return False
+        return datetime.utcnow() - student.last_login_at >= timedelta(days=STALE_LOGIN_2FA_DAYS)
+
+    def finish_login(student):
+        student.last_login_at = datetime.utcnow()
+        db.session.commit()
+        login_user(student)
+
+    def create_order_from_cart(student, notes=None):
+        cart_data = session.get("cart", {})
+        order_number = generate_order_number()
+        total = 0
+
+        order = Order(
+            order_number=order_number,
+            student_id=student.id,
+            total_amount=0,
+            notes=notes,
+            estimated_ready_time=datetime.utcnow() + timedelta(minutes=20)
+        )
+        db.session.add(order)
+        db.session.flush()
+
+        for item_id, quantity in cart_data.items():
+            item = MenuItem.query.get(int(item_id))
+            if item and item.is_available:
+                subtotal = item.price * quantity
+                total += subtotal
+                db.session.add(OrderItem(
+                    order_id=order.id,
+                    menu_item_id=item.id,
+                    quantity=quantity,
+                    unit_price=item.price,
+                    subtotal=subtotal
+                ))
+
+        order.total_amount = total
+        db.session.commit()
+        session.pop("cart", None)
+        return order
 
     @app.route("/")
     def index():
@@ -117,6 +277,28 @@ def register_routes(app):
                 flash("Passwords do not match.", "danger")
                 return render_template("register.html")
 
+            strength, password_feedback = evaluate_password_strength(
+                password,
+                student_id=student_id,
+                name=name,
+                email=email
+            )
+            if strength == "Weak":
+                flash(
+                    "Password strength: Weak. Improve it by choosing a less predictable password: "
+                    + "; ".join(password_feedback)
+                    + ".",
+                    "danger"
+                )
+                return render_template("register.html")
+            if password_feedback:
+                flash(
+                    "Password strength: Medium. You can make it stronger if you "
+                    + "; ".join(password_feedback)
+                    + ".",
+                    "warning"
+                )
+
             if Student.query.filter_by(student_id=student_id).first():
                 flash("Student ID already registered.", "danger")
                 return render_template("register.html")
@@ -139,13 +321,11 @@ def register_routes(app):
             db.session.add(student)
             db.session.commit()
 
-            # Generate 2FA code
-            code = ''.join(random.choices(string.digits, k=6))
-            session['2fa_code'] = code
-            session['pending_user_id'] = student.id
-
-            # Send verification email
-            if not send_2fa_email(student.email, code):
+            if not start_2fa(
+                student,
+                "registration",
+                "complete your registration"
+            ):
                 flash("Unable to send verification email right now. Please try again later.", "danger")
                 return render_template("register.html")
 
@@ -156,7 +336,9 @@ def register_routes(app):
 
     @app.route("/verify-2fa", methods=["GET", "POST"])
     def verify_2fa():
-        if current_user.is_authenticated:
+        purpose = session.get('2fa_purpose')
+
+        if current_user.is_authenticated and purpose != "high_value_order":
             return redirect_user_by_role(current_user)
 
         if 'pending_user_id' not in session or '2fa_code' not in session:
@@ -169,19 +351,42 @@ def register_routes(app):
                 user_id = session['pending_user_id']
                 student = Student.query.get(user_id)
                 if student:
-                    student.is_verified = True
-                    db.session.commit()
+                    student.last_2fa_at = datetime.utcnow()
+
+                    if purpose == "registration":
+                        student.is_verified = True
+                        finish_login(student)
+                        success_message = "Verification successful! Welcome!"
+                        redirect_response = redirect_user_by_role(student)
+                    elif purpose == "stale_login":
+                        finish_login(student)
+                        success_message = "Verification successful. Welcome back!"
+                        redirect_response = redirect_user_by_role(student)
+                    elif purpose == "high_value_order":
+                        if not current_user.is_authenticated or current_user.id != student.id:
+                            flash("Please log in again before completing this order.", "danger")
+                            return redirect(url_for("login"))
+                        db.session.commit()
+                        notes = session.get('pending_order_notes')
+                        order = create_order_from_cart(student, notes=notes)
+                        success_message = f"Order placed successfully! Order number: {order.order_number}"
+                        redirect_response = redirect(url_for("order_confirmation", order_id=order.id))
+                    else:
+                        flash("Unknown verification request. Please try again.", "danger")
+                        return redirect(url_for("login"))
+
                     session.pop('2fa_code', None)
                     session.pop('pending_user_id', None)
-                    login_user(student)
-                    flash("Verification successful! Welcome!", "success")
-                    return redirect_user_by_role(student)
+                    session.pop('2fa_purpose', None)
+                    session.pop('pending_order_notes', None)
+                    flash(success_message, "success")
+                    return redirect_response
                 else:
                     flash("User not found.", "danger")
             else:
                 flash("Invalid verification code.", "danger")
 
-        return render_template("verify_2fa.html")
+        return render_template("verify_2fa.html", purpose=purpose)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -200,16 +405,26 @@ def register_routes(app):
 
             if student and check_password_hash(student.password_hash, password):
                 if not student.is_verified:
-                    # Generate new 2FA code for unverified user
-                    code = ''.join(random.choices(string.digits, k=6))
-                    session['2fa_code'] = code
-                    session['pending_user_id'] = student.id
-                    if not send_2fa_email(student.email, code):
+                    if not start_2fa(
+                        student,
+                        "registration",
+                        "verify your account"
+                    ):
                         flash("Unable to send verification email right now. Please try again later.", "danger")
                         return render_template("login.html")
                     flash("Please verify your account first. Check your email for the code.", "warning")
                     return redirect(url_for("verify_2fa"))
-                login_user(student)
+                if is_stale_login(student):
+                    if not start_2fa(
+                        student,
+                        "stale_login",
+                        "confirm your login"
+                    ):
+                        flash("Unable to send verification email right now. Please try again later.", "danger")
+                        return render_template("login.html")
+                    flash("Please check your email for a verification code.", "warning")
+                    return redirect(url_for("verify_2fa"))
+                finish_login(student)
                 flash("Logged in successfully!", "success")
                 return redirect_user_by_role(student)
 
@@ -432,35 +647,21 @@ def register_routes(app):
 
         if request.method == "POST":
             notes = request.form.get("notes")
-            order_number = generate_order_number()
 
-            order = Order(
-                order_number=order_number,
-                student_id=current_user.id,
-                total_amount=total,
-                notes=notes,
-                estimated_ready_time=datetime.utcnow() + timedelta(minutes=20)
-            )
+            if total > HIGH_VALUE_ORDER_LIMIT:
+                if not start_2fa(
+                    current_user,
+                    "high_value_order",
+                    f"confirm your ${total:.2f} order",
+                    pending_order_notes=notes or ""
+                ):
+                    flash("Unable to send verification email right now. Please try again later.", "danger")
+                    return render_template("checkout.html", order_items=order_items, total=total)
+                flash("Please verify this order with the code sent to your email.", "warning")
+                return redirect(url_for("verify_2fa"))
 
-            db.session.add(order)
-            db.session.flush()
-
-            for item_id, quantity in cart_data.items():
-                item = MenuItem.query.get(int(item_id))
-                if item and item.is_available:
-                    order_item = OrderItem(
-                        order_id=order.id,
-                        menu_item_id=item.id,
-                        quantity=quantity,
-                        unit_price=item.price,
-                        subtotal=item.price * quantity
-                    )
-                    db.session.add(order_item)
-
-            db.session.commit()
-            session.pop("cart", None)
-
-            flash(f"Order placed successfully! Order number: {order_number}", "success")
+            order = create_order_from_cart(current_user, notes=notes)
+            flash(f"Order placed successfully! Order number: {order.order_number}", "success")
             return redirect(url_for("order_confirmation", order_id=order.id))
 
         return render_template("checkout.html", order_items=order_items, total=total)

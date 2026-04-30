@@ -25,13 +25,13 @@ print(f"   MAIL_DEFAULT_SENDER: {app.config.get('MAIL_DEFAULT_SENDER', 'NOT SET'
 
 print("\n3. Email Configuration Status:")
 if app.config.get('MAIL_USERNAME') and app.config.get('MAIL_PASSWORD'):
-    print("   ✓ Email is CONFIGURED - emails will be sent")
+    print("   OK: Email is CONFIGURED - emails will be sent")
 else:
-    print("   ✗ Email is NOT CONFIGURED - emails will NOT be sent (debug mode)")
-    print("   → Set MAIL_USERNAME and MAIL_PASSWORD environment variables to enable email")
+    print("   ERROR: Email is NOT CONFIGURED - emails will NOT be sent (debug mode)")
+    print("   Set MAIL_USERNAME and MAIL_PASSWORD environment variables to enable email")
 
 print("\n=== HOW TO FIX ===")
 print("\nBefore running the app, set these PowerShell environment variables:")
 print('  $env:MAIL_USERNAME="your-email@gmail.com"')
 print('  $env:MAIL_PASSWORD="your-app-password"')
-print('  .\.venv\Scripts\python.exe app.py')
+print(r'  .\.venv\Scripts\python.exe app.py')
