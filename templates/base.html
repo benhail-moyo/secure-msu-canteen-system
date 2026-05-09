@@ -67,7 +67,22 @@
 
                     {% if current_user.role == "staff" %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('staff_dashboard') }}">Staff Dashboard</a>
+                            <a class="nav-link" href="{{ url_for('staff_dashboard') }}">Dashboard</a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('my_orders') }}">My Orders</a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('cart') }}">
+                                <i class="fas fa-shopping-cart"></i> Cart
+                                {% if session.get('cart') %}
+                                    <span class="badge bg-warning text-dark">
+                                        {{ session.get('cart')|length }}
+                                    </span>
+                                {% endif %}
+                            </a>
                         </li>
                     {% endif %}
 

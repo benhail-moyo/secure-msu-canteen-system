@@ -144,6 +144,8 @@ class Order(db.Model):
         nullable=False
     )
 
+    student = db.relationship("Student", backref="orders")
+
     status = db.Column(db.String(20), default="pending", index=True)
 
     total_amount = db.Column(db.Float, nullable=False)
