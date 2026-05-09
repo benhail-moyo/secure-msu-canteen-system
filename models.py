@@ -160,6 +160,8 @@ class Order(db.Model):
 
     estimated_ready_time = db.Column(db.DateTime)
 
+    student = db.relationship("Student", backref="orders")
+
     items = db.relationship(
         "OrderItem",
         backref="order",
@@ -247,3 +249,49 @@ class Feedback(db.Model):
 
     def __repr__(self):
         return f"<Feedback {self.id}>"
+
+
+class Alert(db.Model):
+    __tablename__ = "alerts"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    title = db.Column(db.String(200), nullable=False)
+
+    message = db.Column(db.Text, nullable=False)
+
+    alert_type = db.Column(db.String(20), nullable=False)  # 'info', 'warning', 'urgent'
+
+    is_active = db.Column(db.Boolean, default=True)
+
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False
+    )
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    expires_at = db.Column(db.DateTime)
+
+    manager = db.relationship("Student", backref="alerts")
+
+    def __repr__(self):
+        return f"<Alert {self.title}>"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "message": self.message,
+            "alert_type": self.alert_type,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None
+        }
