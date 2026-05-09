@@ -371,6 +371,13 @@ def register_routes(app):
                         order = create_order_from_cart(student, notes=notes)
                         success_message = f"Order placed successfully! Order number: {order.order_number}"
                         redirect_response = redirect(url_for("order_confirmation", order_id=order.id))
+                    elif purpose == "password_reset":
+                        session['reset_student_id'] = student.id
+                        session.pop('2fa_code', None)
+                        session.pop('pending_user_id', None)
+                        session.pop('2fa_purpose', None)
+                        flash("Verification successful! Please enter your new password.", "success")
+                        return redirect(url_for("reset_password"))
                     else:
                         flash("Unknown verification request. Please try again.", "danger")
                         return redirect(url_for("login"))
@@ -466,9 +473,86 @@ def register_routes(app):
         flash("You have been logged out.", "info")
         return redirect(url_for("login"))
 
-    # ─────────────────────────────────────────────
-    # DASHBOARDS  (all now include a link to menu)
-    # ─────────────────────────────────────────────
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        if request.method == "POST":
+            student_id = request.form.get("student_id", "").strip()
+            name = request.form.get("name", "").strip()
+            email = request.form.get("email", "").strip()
+            phone = request.form.get("phone", "").strip()
+
+            student = Student.query.filter_by(
+                student_id=student_id,
+                name=name,
+                email=email,
+                role="student"
+            ).first()
+
+            if student and (student.phone == phone or (not phone and not student.phone)):
+                if not start_2fa(
+                    student,
+                    "password_reset",
+                    "reset your password"
+                ):
+                    flash("Unable to send verification code. Please try again later.", "danger")
+                    return render_template("forgot_password.html")
+                flash("A verification code has been sent to your email. Please check your inbox.", "success")
+                return redirect(url_for("verify_2fa"))
+            else:
+                flash("The information you provided does not match our records.", "danger")
+
+        return render_template("forgot_password.html")
+
+    @app.route("/reset-password", methods=["GET", "POST"])
+    def reset_password():
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        reset_student_id = session.get("reset_student_id")
+        if not reset_student_id:
+            flash("Please verify your identity first.", "warning")
+            return redirect(url_for("forgot_password"))
+
+        if request.method == "POST":
+            new_password = request.form.get("new_password", "").strip()
+            confirm_password = request.form.get("confirm_password", "").strip()
+
+            if not new_password or not confirm_password:
+                flash("All fields are required.", "danger")
+                return render_template("reset_password.html")
+
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "danger")
+                return render_template("reset_password.html")
+
+            if len(new_password) < 6:
+                flash("Password must be at least 6 characters long.", "danger")
+                return render_template("reset_password.html")
+
+            if new_password.lower() in COMMON_WEAK_PASSWORDS:
+                flash("This password is too common. Please choose a stronger password.", "danger")
+                return render_template("reset_password.html")
+
+            student = Student.query.get(reset_student_id)
+            if not student:
+                flash("User not found.", "danger")
+                return redirect(url_for("forgot_password"))
+
+            if check_password_hash(student.password_hash, new_password):
+                flash("Invalid password, use a password you have never used before.", "danger")
+                return render_template("reset_password.html")
+
+            student.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+
+            session.pop("reset_student_id", None)
+            flash("Password reset successfully! Please log in with your new password.", "success")
+            return redirect(url_for("login"))
+
+        return render_template("reset_password.html")
 
     @app.route("/admin/dashboard")
     @login_required

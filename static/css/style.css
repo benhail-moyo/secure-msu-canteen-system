@@ -3,15 +3,40 @@
     --msu-blue: #1e06f3;
     --msu-gold: #FFD700;
     --primary-color: #0118e9;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+    --navbar-bg: #0118e9;
+    --footer-bg: #2d2d2d;
+    --card-bg: #ffffff;
+    --hover-bg: #f8f9fa;
+}
+
+html[data-theme="dark"] {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0b0;
+    --border-color: #404040;
+    --navbar-bg: #0a0e2e;
+    --footer-bg: #0f1119;
+    --card-bg: #252525;
+    --hover-bg: #333333;
 }
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f8f9fa;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .navbar {
     box-shadow: 0 2px 10px rgb(2, 49, 255);
+    background-color: var(--navbar-bg) !important;
+    transition: background-color 0.3s ease;
 }
 
 .navbar-brand {
@@ -115,10 +140,11 @@ body {
 .cart-item {
     transition: background-color 0.2s ease;
     border-radius: 10px;
+    background-color: var(--card-bg);
 }
 
 .cart-item:hover {
-    background-color: #f8f9fa;
+    background-color: var(--hover-bg);
 }
 
 .order-status {
@@ -192,21 +218,140 @@ body {
 }
 
 
-/* This targets the navbar background specifically */
-.navbar.navbar-expand-lg {
-    background-color: #0118e9 !important; /* Your primary blue */
+/* Theme Toggle Styles */
+.theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.3rem;
+    color: white;
+    padding: 0.5rem;
+    margin-left: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    transition: all 0.3s ease;
 }
 
-/* This makes sure the text and logo are readable on blue */
-.navbar .navbar-brand, 
+.theme-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    transform: scale(1.1);
+}
+
+.theme-toggle:active {
+    transform: scale(0.95);
+}
+
+.theme-toggle i {
+    transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.theme-toggle.switching i {
+    transform: rotate(360deg);
+}
+
+/* Navbar specific */
+.navbar.navbar-expand-lg {
+    background-color: var(--navbar-bg) !important;
+}
+
+.navbar .navbar-brand,
 .navbar .nav-link {
     color: white !important;
+    transition: color 0.3s ease;
 }
 
-/* Optional: Make the hamburger menu icon white for mobile */
 .navbar-toggler {
     border-color: rgba(255, 255, 255, 0.5) !important;
 }
+
 .navbar-toggler-icon {
     filter: invert(1);
+}
+
+/* Card styles with theme support */
+.card {
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.card-footer {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Alert styles */
+.alert {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+/* Footer */
+footer {
+    background-color: var(--footer-bg) !important;
+    color: var(--text-primary);
+    transition: background-color 0.3s ease;
+}
+
+/* Table styles */
+.table {
+    color: var(--text-primary);
+}
+
+.table thead {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.table tbody tr {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+.table tbody tr:hover {
+    background-color: var(--hover-bg);
+}
+
+/* Form controls */
+.form-control,
+.form-select {
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    border-color: var(--msu-blue);
+    box-shadow: 0 0 0 0.2rem rgba(26, 1, 255, 0.25);
+}
+
+/* Dropdown menu */
+.dropdown-menu {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+.dropdown-item {
+    color: var(--text-primary);
+}
+
+.dropdown-item:hover {
+    background-color: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.dropdown-divider {
+    border-color: var(--border-color);
 }
