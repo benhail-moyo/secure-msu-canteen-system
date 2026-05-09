@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, render_template_string
+from zxcvbn import zxcvbn
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,16 +16,6 @@ mail = Mail()
 
 STALE_LOGIN_2FA_DAYS = 7
 HIGH_VALUE_ORDER_LIMIT = 100
-COMMON_WEAK_PASSWORDS = {
-    "password",
-    "password1",
-    "123456",
-    "12345678",
-    "qwerty",
-    "admin",
-    "letmein",
-    "welcome",
-}
 
 
 def create_app(config_name=None):
@@ -149,10 +140,6 @@ def evaluate_password_strength(password, student_id=None, name=None, email=None)
             score -= 1
             feedback.append("avoid using your name, student ID, or email in the password")
             break
-
-    if normalized_password in COMMON_WEAK_PASSWORDS:
-        score = 0
-        feedback.append("avoid common passwords")
 
     if score >= 6:
         strength = "Strong"
