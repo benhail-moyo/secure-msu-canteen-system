@@ -519,28 +519,8 @@ def register_routes(app):
             flash("Access denied. Staff only.", "danger")
             return redirect_user_by_role(current_user)
 
-        # Staff member's own orders
-        my_orders = Order.query.filter_by(
-            student_id=current_user.id
-        ).order_by(Order.created_at.desc()).all()
-
-        # Basic stats for staff member
-        total_orders_today = Order.query.filter(
-            Order.student_id == current_user.id,
-            Order.created_at >= datetime.utcnow().date()
-        ).count()
-
-        pending_orders = Order.query.filter_by(
-            student_id=current_user.id,
-            status="pending"
-        ).count()
-
-        return render_template(
-            "staff_dashboard.html",
-            my_orders=my_orders,
-            total_orders_today=total_orders_today,
-            pending_orders=pending_orders
-        )
+        orders = Order.query.order_by(Order.created_at.desc()).all()
+        return render_template("staff_dashboard.html", orders=orders)
 
     # ─────────────────────────────────────────────
     # MENU  (accessible to ALL authenticated roles)
@@ -645,8 +625,8 @@ def register_routes(app):
     @app.route("/checkout", methods=["GET", "POST"])
     @login_required
     def checkout():
-        if current_user.role not in ["student", "staff"]:
-            flash("Only students and staff can place orders.", "danger")
+        if current_user.role != "student":
+            flash("Only students can place orders.", "danger")
             return redirect_user_by_role(current_user)
 
         cart_data = session.get("cart", {})
@@ -729,8 +709,8 @@ def register_routes(app):
     @app.route("/order/<int:order_id>/feedback", methods=["GET", "POST"])
     @login_required
     def submit_feedback(order_id):
-        if current_user.role not in ["student", "staff"]:
-            flash("Only students and staff can submit feedback.", "danger")
+        if current_user.role != "student":
+            flash("Only students can submit feedback.", "danger")
             return redirect_user_by_role(current_user)
 
         order = Order.query.get_or_404(order_id)
@@ -820,8 +800,7 @@ def special_role_login(role, required_key, dashboard_endpoint, template):
                 name=f"{role.title()} User",
                 email=email,
                 password_hash=generate_password_hash(required_key),
-                role=role,
-                is_verified=True
+                role=role
             )
             db.session.add(user)
             db.session.commit()
