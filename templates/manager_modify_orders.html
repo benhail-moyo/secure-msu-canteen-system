@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Modify Orders - MSU Canteen{% endblock %}
+{% block content %}
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-list-check text-info me-2"></i>Manage Orders</h2>
+            <p class="text-muted mb-0">Modify order items when unavailable</p>
+        </div>
+        <a href="{{ url_for('manager_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Status Filter -->
+    <div class="mb-4">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('manager_modify_orders', status='pending') }}" 
+               class="btn {% if status_filter == 'pending' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Pending
+            </a>
+            <a href="{{ url_for('manager_modify_orders', status='ready') }}" 
+               class="btn {% if status_filter == 'ready' %}btn-success{% else %}btn-outline-success{% endif %}">
+                Ready for Pickup
+            </a>
+            <a href="{{ url_for('manager_modify_orders', status='completed') }}" 
+               class="btn {% if status_filter == 'completed' %}btn-info{% else %}btn-outline-info{% endif %}">
+                Completed
+            </a>
+            <a href="{{ url_for('manager_modify_orders', status='cancelled') }}" 
+               class="btn {% if status_filter == 'cancelled' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                Cancelled
+            </a>
+        </div>
+    </div>
+
+    {% if orders %}
+        <div class="row g-4">
+            {% for order in orders %}
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1">Order #{{ order.order_number }}</h5>
+                                    <small class="text-muted">{{ order.created_at.strftime('%B %d, %Y at %I:%M %p') }}</small>
+                                </div>
+                                <span class="badge bg-{% if order.status == 'pending' %}warning{% elif order.status == 'ready' %}success{% elif order.status == 'completed' %}info{% else %}danger{% endif %}">
+                                    {{ order.status|upper }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-2"><i class="fas fa-user me-2"></i>Customer</h6>
+                            <div class="mb-3">
+                                <p class="mb-1"><strong>{{ order.student.name }}</strong> ({{ order.student.student_id }})</p>
+                                <p class="mb-0 text-muted small">{{ order.student.email }}</p>
+                            </div>
+
+                            <h6 class="fw-bold mb-2"><i class="fas fa-shopping-bag me-2"></i>Items</h6>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-borderless">
+                                    <tbody>
+                                        {% for item in order.items %}
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ item.menu_item.name if item.menu_item else 'Unknown Item' }}</strong><br>
+                                                    <small class="text-muted">Qty: {{ item.quantity }} × ${{ "%.2f"|format(item.unit_price) }}</small>
+                                                </td>
+                                                <td class="text-end">
+                                                    <strong>${{ "%.2f"|format(item.subtotal) }}</strong><br>
+                                                    {% if not item.menu_item or not item.menu_item.is_available %}
+                                                        <small class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Unavailable</small>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Modification Section -->
+                            {% set availability = namespace(has_unavailable=false) %}
+                            {% for item in order.items %}
+                                {% if not item.menu_item or not item.menu_item.is_available %}
+                                    {% set availability.has_unavailable = true %}
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if availability.has_unavailable %}
+                                <div class="alert alert-warning" role="alert">
+                                    <i class="fas fa-exclamation-circle me-2"></i>
+                                    <strong>Action Required:</strong> Some items in this order are unavailable. Please select replacements.
+                                </div>
+
+                                <form method="POST" action="{{ url_for('modify_order_items', order_id=order.id) }}" class="mb-3">
+                                    <div class="border rounded p-3 bg-light">
+                                        {% for item in order.items %}
+                                            {% if not item.menu_item or not item.menu_item.is_available %}
+                                                <div class="mb-3">
+                                                    <label class="form-label">
+                                                        <strong>Replace Unavailable Item:</strong><br>
+                                                        <small class="text-muted">Originally: {{ item.menu_item.name if item.menu_item else 'Unknown Item' }} (Qty: {{ item.quantity }})</small>
+                                                    </label>
+                                                    <select class="form-select" name="modifications[{{ item.id }}]" required>
+                                                        <option value="">-- Select Alternative Item --</option>
+                                                        {% for available_item in available_items %}
+                                                            <option value="{{ available_item.id }}">
+                                                                {{ available_item.name }} (${{ "%.2f"|format(available_item.price * item.quantity) }} for {{ item.quantity }}x)
+                                                            </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-save me-2"></i>Save Modifications
+                                        </button>
+                                    </div>
+                                </form>
+                            {% else %}
+                                <div class="alert alert-success" role="alert">
+                                    <i class="fas fa-check-circle me-2"></i>All items are available.
+                                </div>
+                            {% endif %}
+
+                            <div class="border-top pt-3 mt-3">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Total:</span>
+                                    <strong>${{ "%.2f"|format(order.total_amount) }}</strong>
+                                </div>
+                                {% if order.notes %}
+                                    <small class="text-muted d-block">
+                                        <strong>Notes:</strong> {{ order.notes }}
+                                    </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle me-2"></i>
+            No {% if status_filter %}{{ status_filter }}{% endif %} orders found.
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+    // Parse JSON modifications on form submission
+    document.querySelectorAll('form[action*="/modify-items"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const modifications = {};
+            const selects = this.querySelectorAll('select[name*="modifications"]');
+            let valid = true;
+
+            selects.forEach(select => {
+                const match = select.name.match(/modifications\[(\d+)\]/);
+                if (match) {
+                    const itemId = match[1];
+                    const selectedValue = select.value;
+                    
+                    if (!selectedValue) {
+                        valid = false;
+                        select.classList.add('is-invalid');
+                    } else {
+                        modifications[itemId] = selectedValue;
+                        select.classList.remove('is-invalid');
+                    }
+                }
+            });
+
+            if (!valid) {
+                e.preventDefault();
+                alert('Please select an alternative item for all unavailable items.');
+                return false;
+            }
+
+            // Create a hidden input with JSON data
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'modifications';
+            hiddenInput.value = JSON.stringify(modifications);
+            this.appendChild(hiddenInput);
+        });
+    });
+</script>
+{% endblock %}

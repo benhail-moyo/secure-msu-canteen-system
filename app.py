@@ -9,7 +9,7 @@ import random
 import string
 
 from config import config
-from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback
+from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback, Alert
 
 mail = Mail()
 
@@ -49,7 +49,8 @@ def create_app(config_name=None):
     def load_user(user_id):
         try:
             student = Student.query.get(int(user_id))
-            if student and student.is_verified:
+            # Allow verified students, or any staff/manager/admin users (they verify on creation)
+            if student and (student.is_verified or student.role in ['manager', 'staff', 'admin']):
                 return student
             return None
         except (ValueError, TypeError):
@@ -523,6 +524,344 @@ def register_routes(app):
         return render_template("staff_dashboard.html", orders=orders)
 
     # ─────────────────────────────────────────────
+    # MANAGER ROUTES  (Manager only)
+    # ─────────────────────────────────────────────
+
+    @app.route("/manager/meals")
+    @login_required
+    def manager_meals():
+        """Display all menu items for management."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        page = request.args.get("page", 1, type=int)
+        items = MenuItem.query.paginate(page=page, per_page=12)
+        categories = Category.query.filter_by(is_active=True).all()
+
+        return render_template(
+            "manager_meals.html",
+            items=items,
+            categories=categories
+        )
+
+    @app.route("/manager/meal/add", methods=["GET", "POST"])
+    @login_required
+    def add_meal():
+        """Add a new meal to the menu."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            description = request.form.get("description", "").strip()
+            price = request.form.get("price", "")
+            category_id = request.form.get("category_id", "")
+            image_url = request.form.get("image_url", "").strip()
+            preparation_time = request.form.get("preparation_time", 15, type=int)
+            calories = request.form.get("calories", "", type=lambda x: int(x) if x else None)
+            is_vegetarian = request.form.get("is_vegetarian") == "on"
+            is_vegan = request.form.get("is_vegan") == "on"
+            is_gluten_free = request.form.get("is_gluten_free") == "on"
+
+            if not name or not price or not category_id:
+                flash("Name, price, and category are required.", "danger")
+                categories = Category.query.filter_by(is_active=True).all()
+                return render_template("manager_meal_form.html", categories=categories)
+
+            try:
+                price = float(price)
+                if price < 0:
+                    raise ValueError("Price must be positive")
+            except ValueError:
+                flash("Price must be a valid positive number.", "danger")
+                categories = Category.query.filter_by(is_active=True).all()
+                return render_template("manager_meal_form.html", categories=categories)
+
+            category = Category.query.get(category_id)
+            if not category:
+                flash("Invalid category selected.", "danger")
+                categories = Category.query.filter_by(is_active=True).all()
+                return render_template("manager_meal_form.html", categories=categories)
+
+            item = MenuItem(
+                name=name,
+                description=description,
+                price=price,
+                category_id=category_id,
+                image_url=image_url if image_url else None,
+                preparation_time=preparation_time,
+                calories=calories,
+                is_vegetarian=is_vegetarian,
+                is_vegan=is_vegan,
+                is_gluten_free=is_gluten_free,
+                is_available=True
+            )
+
+            db.session.add(item)
+            db.session.commit()
+
+            flash(f"Meal '{name}' added successfully!", "success")
+            return redirect(url_for("manager_meals"))
+
+        categories = Category.query.filter_by(is_active=True).all()
+        return render_template("manager_meal_form.html", categories=categories)
+
+    @app.route("/manager/meal/<int:item_id>/edit", methods=["GET", "POST"])
+    @login_required
+    def edit_meal(item_id):
+        """Edit an existing meal."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        item = MenuItem.query.get_or_404(item_id)
+
+        if request.method == "POST":
+            item.name = request.form.get("name", "").strip() or item.name
+            item.description = request.form.get("description", "").strip()
+            
+            price = request.form.get("price", "")
+            if price:
+                try:
+                    price = float(price)
+                    if price < 0:
+                        raise ValueError("Price must be positive")
+                    item.price = price
+                except ValueError:
+                    flash("Price must be a valid positive number.", "danger")
+                    categories = Category.query.filter_by(is_active=True).all()
+                    return render_template("manager_meal_form.html", item=item, categories=categories)
+
+            category_id = request.form.get("category_id", "")
+            if category_id:
+                category = Category.query.get(category_id)
+                if category:
+                    item.category_id = category_id
+                else:
+                    flash("Invalid category selected.", "danger")
+                    categories = Category.query.filter_by(is_active=True).all()
+                    return render_template("manager_meal_form.html", item=item, categories=categories)
+
+            item.image_url = request.form.get("image_url", "").strip() or None
+            item.preparation_time = request.form.get("preparation_time", item.preparation_time, type=int)
+            
+            calories = request.form.get("calories", "")
+            if calories:
+                try:
+                    item.calories = int(calories)
+                except ValueError:
+                    pass
+
+            item.is_vegetarian = request.form.get("is_vegetarian") == "on"
+            item.is_vegan = request.form.get("is_vegan") == "on"
+            item.is_gluten_free = request.form.get("is_gluten_free") == "on"
+            item.is_available = request.form.get("is_available") == "on"
+
+            db.session.commit()
+            flash(f"Meal '{item.name}' updated successfully!", "success")
+            return redirect(url_for("manager_meals"))
+
+        categories = Category.query.filter_by(is_active=True).all()
+        return render_template("manager_meal_form.html", item=item, categories=categories)
+
+    @app.route("/manager/meal/<int:item_id>/delete", methods=["POST"])
+    @login_required
+    def delete_meal(item_id):
+        """Delete a meal from the menu."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        item = MenuItem.query.get_or_404(item_id)
+        item_name = item.name
+
+        db.session.delete(item)
+        db.session.commit()
+
+        flash(f"Meal '{item_name}' deleted successfully!", "success")
+        return redirect(url_for("manager_meals"))
+
+    @app.route("/manager/alerts")
+    @login_required
+    def manager_alerts():
+        """Manage canteen alerts and announcements."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        alerts = Alert.query.order_by(Alert.created_at.desc()).all()
+        return render_template("manager_alerts.html", alerts=alerts)
+
+    @app.route("/manager/alert/create", methods=["POST"])
+    @login_required
+    def create_alert():
+        """Create a new alert."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        title = request.form.get("title", "").strip()
+        message = request.form.get("message", "").strip()
+        alert_type = request.form.get("alert_type", "info")
+
+        if not title or not message:
+            flash("Title and message are required.", "danger")
+            return redirect(url_for("manager_alerts"))
+
+        if alert_type not in ["info", "warning", "urgent"]:
+            alert_type = "info"
+
+        alert = Alert(
+            title=title,
+            message=message,
+            alert_type=alert_type,
+            created_by=current_user.id,
+            is_active=True
+        )
+
+        db.session.add(alert)
+        db.session.commit()
+
+        flash(f"Alert '{title}' created successfully!", "success")
+        return redirect(url_for("manager_alerts"))
+
+    @app.route("/manager/alert/<int:alert_id>/delete", methods=["POST"])
+    @login_required
+    def delete_alert(alert_id):
+        """Delete an alert."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        alert = Alert.query.get_or_404(alert_id)
+        alert_title = alert.title
+
+        db.session.delete(alert)
+        db.session.commit()
+
+        flash(f"Alert '{alert_title}' deleted successfully!", "success")
+        return redirect(url_for("manager_alerts"))
+
+    @app.route("/manager/alert/<int:alert_id>/toggle", methods=["POST"])
+    @login_required
+    def toggle_alert(alert_id):
+        """Toggle alert active status."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        alert = Alert.query.get_or_404(alert_id)
+        alert.is_active = not alert.is_active
+        db.session.commit()
+
+        status = "activated" if alert.is_active else "deactivated"
+        flash(f"Alert '{alert.title}' {status}!", "success")
+        return redirect(url_for("manager_alerts"))
+
+    @app.route("/manager/orders/modify")
+    @login_required
+    def manager_modify_orders():
+        """View and modify processed orders when items are not available."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        status_filter = request.args.get("status", "pending")
+        
+        if status_filter:
+            orders = Order.query.filter_by(status=status_filter).order_by(
+                Order.created_at.desc()
+            ).all()
+        else:
+            orders = Order.query.order_by(Order.created_at.desc()).all()
+
+        available_items = MenuItem.query.filter_by(is_available=True).all()
+        return render_template(
+            "manager_modify_orders.html",
+            orders=orders,
+            available_items=available_items,
+            status_filter=status_filter
+        )
+
+    @app.route("/manager/order/<int:order_id>/modify-items", methods=["POST"])
+    @login_required
+    def modify_order_items(order_id):
+        """Modify order items when original items are not available."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        order = Order.query.get_or_404(order_id)
+        modifications = request.form.get("modifications")
+
+        import json
+
+        mods = {}
+        if modifications:
+            try:
+                parsed_mods = json.loads(modifications)
+                if isinstance(parsed_mods, dict):
+                    mods.update(parsed_mods)
+            except json.JSONDecodeError:
+                flash("Invalid modification data.", "danger")
+                return redirect(url_for("manager_modify_orders", status=order.status))
+
+        for field_name, value in request.form.items():
+            if field_name.startswith("modifications[") and field_name.endswith("]"):
+                order_item_id = field_name[len("modifications["):-1]
+                mods[order_item_id] = value
+
+        mods = {
+            order_item_id: new_item_id
+            for order_item_id, new_item_id in mods.items()
+            if str(new_item_id).strip()
+        }
+
+        if not mods:
+            flash("Please select at least one replacement item.", "warning")
+            return redirect(url_for("manager_modify_orders", status=order.status))
+
+        # Apply modifications to order items
+        modified_count = 0
+        for order_item_id, new_item_id in mods.items():
+            try:
+                order_item_id = int(order_item_id)
+                new_item_id = int(new_item_id)
+            except (TypeError, ValueError):
+                flash("Invalid replacement selection.", "danger")
+                return redirect(url_for("manager_modify_orders", status=order.status))
+
+            order_item = OrderItem.query.get(order_item_id)
+            if not order_item or order_item.order_id != order_id:
+                flash("Invalid order item selected.", "danger")
+                return redirect(url_for("manager_modify_orders", status=order.status))
+
+            new_item = MenuItem.query.get(new_item_id)
+            if not new_item or not new_item.is_available:
+                flash("Selected replacement item is not available.", "warning")
+                return redirect(url_for("manager_modify_orders", status=order.status))
+
+            order_item.menu_item_id = new_item.id
+            order_item.unit_price = new_item.price
+            order_item.subtotal = new_item.price * order_item.quantity
+            modified_count += 1
+
+        if not modified_count:
+            flash("No order items were modified.", "warning")
+            return redirect(url_for("manager_modify_orders", status=order.status))
+
+        order.total_amount = sum(item.subtotal for item in order.items)
+        modification_note = "[Manager Modified Items]"
+        if modification_note not in (order.notes or ""):
+            order.notes = f"{order.notes.rstrip()}\n{modification_note}" if order.notes else modification_note
+        db.session.commit()
+
+        flash("Order items modified successfully!", "success")
+        return redirect(url_for("manager_modify_orders", status=order.status))
+
+    # ─────────────────────────────────────────────
     # MENU  (accessible to ALL authenticated roles)
     # ─────────────────────────────────────────────
 
@@ -800,7 +1139,8 @@ def special_role_login(role, required_key, dashboard_endpoint, template):
                 name=f"{role.title()} User",
                 email=email,
                 password_hash=generate_password_hash(required_key),
-                role=role
+                role=role,
+                is_verified=True
             )
             db.session.add(user)
             db.session.commit()

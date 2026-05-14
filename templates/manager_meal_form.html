@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Edit Meal{% else %}Add Meal{% endif %} - MSU Canteen{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="fw-bold mb-1">
+                        <i class="fas fa-{% if item %}edit{% else %}plus{% endif %} text-success me-2"></i>
+                        {% if item %}Edit Meal{% else %}Add New Meal{% endif %}
+                    </h2>
+                    <p class="text-muted mb-4">{% if item %}Update the meal details{% else %}Create a new menu item{% endif %}</p>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" class="needs-validation" novalidate>
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Meal Name *</label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   value="{{ item.name if item else '' }}" required>
+                            <div class="form-text">Enter the name of the meal</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3">{{ item.description if item else '' }}</textarea>
+                            <div class="form-text">Brief description of the meal</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="price" class="form-label">Price ($) *</label>
+                                <input type="number" class="form-control" id="price" name="price" 
+                                       step="0.01" min="0" value="{{ "%.2f"|format(item.price) if item else '' }}" required>
+                                <div class="form-text">Price in USD</div>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="category_id" class="form-label">Category *</label>
+                                <select class="form-select" id="category_id" name="category_id" required>
+                                    <option value="">Select a category</option>
+                                    {% for category in categories %}
+                                        <option value="{{ category.id }}" {% if item and item.category_id == category.id %}selected{% endif %}>
+                                            {{ category.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="preparation_time" class="form-label">Preparation Time (minutes)</label>
+                                <input type="number" class="form-control" id="preparation_time" name="preparation_time" 
+                                       min="1" value="{{ item.preparation_time if item else 15 }}">
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="calories" class="form-label">Calories</label>
+                                <input type="number" class="form-control" id="calories" name="calories" 
+                                       min="0" value="{{ item.calories if item else '' }}">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="image_url" class="form-label">Image URL <span class="text-muted">(optional)</span></label>
+                            <input type="url" class="form-control" id="image_url" name="image_url" 
+                                   value="{{ (item.image_url or '') if item else '' }}">
+                            <div class="form-text">Leave blank if this meal does not have an image</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h5 class="mb-3">Dietary Options</h5>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="is_vegetarian" name="is_vegetarian"
+                                       {% if item and item.is_vegetarian %}checked{% endif %}>
+                                <label class="form-check-label" for="is_vegetarian">
+                                    Vegetarian
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="is_vegan" name="is_vegan"
+                                       {% if item and item.is_vegan %}checked{% endif %}>
+                                <label class="form-check-label" for="is_vegan">
+                                    Vegan
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_gluten_free" name="is_gluten_free"
+                                       {% if item and item.is_gluten_free %}checked{% endif %}>
+                                <label class="form-check-label" for="is_gluten_free">
+                                    Gluten-Free
+                                </label>
+                            </div>
+                        </div>
+
+                        {% if item %}
+                            <div class="mb-3">
+                                <h5 class="mb-3">Availability</h5>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_available" name="is_available"
+                                           {% if item.is_available %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_available">
+                                        Available for order
+                                    </label>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>{% if item %}Update Meal{% else %}Add Meal{% endif %}
+                            </button>
+                            <a href="{{ url_for('manager_meals') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-2"></i>Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Form validation
+    (function () {
+        'use strict';
+        window.addEventListener('load', function () {
+            const forms = document.querySelectorAll('.needs-validation');
+            Array.prototype.slice.call(forms).forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+        }, false);
+    })();
+</script>
+{% endblock %}

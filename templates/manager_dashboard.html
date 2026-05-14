@@ -77,13 +77,19 @@
         <div class="col-md-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-body p-4">
-                    <h5 class="fw-bold mb-3">Quick Actions</h5>
+                    <h5 class="fw-bold mb-3"><i class="fas fa-tasks text-primary me-2"></i>Manager Tools</h5>
                     <div class="d-grid gap-2">
-                        <a href="{{ url_for('menu') }}" class="btn btn-outline-primary">
-                            <i class="fas fa-utensils me-2"></i>Browse Menu
+                        <a href="{{ url_for('manager_meals') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-utensils me-2"></i>Manage Meals
                         </a>
-                        <a href="{{ url_for('my_orders') }}" class="btn btn-outline-secondary">
-                            <i class="fas fa-list me-2"></i>All Orders
+                        <a href="{{ url_for('manager_alerts') }}" class="btn btn-outline-warning">
+                            <i class="fas fa-bell me-2"></i>Manage Alerts
+                        </a>
+                        <a href="{{ url_for('manager_modify_orders') }}" class="btn btn-outline-info">
+                            <i class="fas fa-list-check me-2"></i>Modify Orders
+                        </a>
+                        <a href="{{ url_for('menu') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-eye me-2"></i>View Menu
                         </a>
                     </div>
                 </div>
