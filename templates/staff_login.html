@@ -1,72 +1,127 @@
 {% extends "base.html" %}
 {% block title %}Staff Login - MSU Canteen{% endblock %}
+
 {% block content %}
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
-            <div class="card border-0 shadow">
-                <div class="card-body p-5">
+<style>
+    .login-bg-wrapper {
+        position: relative;
+        min-height: 100vh;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        background-color: #fbfbfb;
+        overflow: hidden; /* Stops scrollbars if images peek out */
+    }
 
-                    <div class="text-center mb-4">
-                        <img src="{{ url_for('static', filename='css/logo.jpg') }}"
-                             alt="MSU Logo"
-                             class="msu-logo mb-3"
-                             style="max-width: 250px; height: auto;">
-                        <h5 class="fw-bold text-muted mt-2">Staff Portal</h5>
-                    </div>
+    /* Base style for both background illustrations */
+    .bg-illustration {
+        position: absolute;
+        bottom: 0;
+        width: 28%; /* Scales beautifully with screen width */
+        max-width: 400px; /* Stops images from becoming too large on huge displays */
+        height: auto;
+        z-index: 1; /* Puts images behind the login form */
+    }
 
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                    {{ message }}
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    /* Positions the first image on the bottom-left */
+    .bg-left {
+        left: 2%;
+    }
+
+    /* Positions the second image on the bottom-right */
+    .bg-right {
+        right: 2%;
+    }
+
+    /* Forces your form wrapper container strictly above the images */
+    .login-content-container {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+    }
+
+    /* Responsive Guardrail: Hides the illustrations on tablets and mobile screens */
+    @media (max-width: 992px) {
+        .bg-illustration {
+            display: none;
+        }
+    }
+</style>
+
+<div class="login-bg-wrapper">
+    <img src="{{ url_for('static', filename='css/bckgrd-login.svg') }}" class="bg-illustration bg-left" alt="Left Vector">
+
+    <img src="{{ url_for('static', filename='css/bckgrd-login 2.svg') }}" class="bg-illustration bg-right" alt="Right Vector">
+
+    <div class="login-content-container">
+        <div class="container py-5">
+            <div class="row justify-content-center">
+                <div class="col-md-6 col-lg-5">
+                    <div class="card border-0 shadow">
+                        <div class="card-body p-5">
+
+                            <div class="text-center mb-4">
+                                <img src="{{ url_for('static', filename='css/logo.jpg') }}"
+                                     alt="MSU Logo"
+                                     class="msu-logo mb-3"
+                                     style="max-width: 250px; height: auto;">
+                                <h5 class="fw-bold text-muted mt-2">Staff Portal</h5>
+                            </div>
+
+                            {% with messages = get_flashed_messages(with_categories=true) %}
+                                {% if messages %}
+                                    {% for category, message in messages %}
+                                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                            {{ message }}
+                                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
+                            {% endwith %}
+
+                            <form method="POST">
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email Address</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                        <input type="email" class="form-control" id="email" name="email"
+                                               placeholder="Enter your email" required>
+                                    </div>
                                 </div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
 
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email Address</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-                                <input type="email" class="form-control" id="email" name="email"
-                                       placeholder="Enter your email" required>
-                            </div>
+                                <div class="mb-4">
+                                    <label for="access_key" class="form-label">Staff Access Key</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-key"></i></span>
+                                        <input type="password" class="form-control" id="access_key" name="access_key"
+                                               placeholder="Enter staff access key" required>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-sign-in-alt me-2"></i>Login as Staff
+                                </button>
+                            </form>
+
+                            <hr>
+                            <p class="text-center mb-1">
+                                <a href="{{ url_for('admin_login') }}">
+                                    <i class="fas fa-user-shield me-1"></i>Admin Login
+                                </a>
+                            </p>
+                            <p class="text-center mb-0">
+                                <a href="{{ url_for('manager_login') }}">
+                                    <i class="fas fa-user-tie me-1"></i>Manager Login
+                                </a>
+                            </p>
+                            <p class="text-center mt-2 mb-0">
+                                <a href="{{ url_for('login') }}">
+                                    <i class="fas fa-arrow-left me-1"></i>Back to Student Login
+                                </a>
+                            </p>
+
                         </div>
-
-                        <div class="mb-4">
-                            <label for="access_key" class="form-label">Staff Access Key</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-key"></i></span>
-                                <input type="password" class="form-control" id="access_key" name="access_key"
-                                       placeholder="Enter staff access key" required>
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-sign-in-alt me-2"></i>Login as Staff
-                        </button>
-                    </form>
-
-                    <hr>
-                    <p class="text-center mb-1">
-                        <a href="{{ url_for('admin_login') }}">
-                            <i class="fas fa-user-shield me-1"></i>Admin Login
-                        </a>
-                    </p>
-                    <p class="text-center mb-0">
-                        <a href="{{ url_for('manager_login') }}">
-                            <i class="fas fa-user-tie me-1"></i>Manager Login
-                        </a>
-                    </p>
-                    <p class="text-center mt-2 mb-0">
-                        <a href="{{ url_for('login') }}">
-                            <i class="fas fa-arrow-left me-1"></i>Back to Student Login
-                        </a>
-                    </p>
-
+                    </div>
                 </div>
             </div>
         </div>
