@@ -51,7 +51,6 @@
                         <p class="card-text text-muted">{{ item.description }}</p>
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="h5 text-primary mb-0">${{ "%.2f"|format(item.price) }}</span>
-                            <div>{% if item.is_vegetarian %}<span class="badge bg-success">Vegetarian</span>{% endif %}{% if item.is_vegan %}<span class="badge bg-info">Vegan</span>{% endif %}</div>
                         </div>
                         <small class="text-muted"><i class="fas fa-clock me-1"></i>{{ item.preparation_time }} mins</small>
                     </div>

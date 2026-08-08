@@ -6,10 +6,11 @@ from sqlalchemy import inspect, text
 from datetime import datetime, timedelta
 import os
 import random
+import secrets
 import string
 
 from config import config
-from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback
+from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback, PasswordResetToken
 
 mail = Mail()
 
@@ -186,6 +187,29 @@ def register_routes(app):
             app.logger.error("Failed to send 2FA email: %s", exc)
             return False
 
+    def send_password_reset_email(email, reset_url):
+        """Send a password reset link to the student email."""
+        if not app.config.get("MAIL_USERNAME") or not app.config.get("MAIL_PASSWORD"):
+            app.logger.warning("Email credentials are not configured; dropping password reset email and printing reset link to console.")
+            print(f"[PASSWORD RESET DEBUG] Send reset link to {email}: {reset_url}")
+            return True
+
+        msg = Message(
+            subject="Reset your MSU Canteen password",
+            recipients=[email],
+            body=(
+                "You requested a password reset for your MSU Canteen account.\n\n"
+                f"Use the following link to reset your password:\n{reset_url}\n\n"
+                "If you did not request this email, you can safely ignore it."
+            )
+        )
+        try:
+            mail.send(msg)
+            return True
+        except Exception as exc:
+            app.logger.error("Failed to send password reset email: %s", exc)
+            return False
+
     def start_2fa(student, purpose, message, **extra_session_data):
         """Start an email 2FA challenge for a specific purpose."""
         code = ''.join(random.choices(string.digits, k=6))
@@ -252,7 +276,15 @@ def register_routes(app):
     def index():
         if current_user.is_authenticated:
             return redirect_user_by_role(current_user)
-        return redirect(url_for("login"))
+
+        categories = Category.query.filter_by(is_active=True).order_by(Category.display_order).all()
+        featured_items = MenuItem.query.filter_by(is_available=True).limit(6).all()
+
+        return render_template(
+            "index.html",
+            categories=categories,
+            featured_items=featured_items
+        )
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
@@ -431,6 +463,100 @@ def register_routes(app):
             flash("Invalid email/student ID or password.", "danger")
 
         return render_template("login.html")
+
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            if not email:
+                flash("Please enter your email address.", "danger")
+                return render_template("forgot_password.html")
+
+            student = Student.query.filter_by(email=email).first()
+            if student:
+                token = secrets.token_urlsafe(32)
+                expires_at = datetime.utcnow() + timedelta(hours=1)
+
+                PasswordResetToken.query.filter_by(student_id=student.id).delete()
+                db.session.add(PasswordResetToken(
+                    student_id=student.id,
+                    token=token,
+                    expires_at=expires_at
+                ))
+                db.session.commit()
+
+                reset_url = url_for("reset_password", token=token, _external=True)
+                send_password_reset_email(student.email, reset_url)
+
+            flash("If that account exists, a password reset email has been sent.", "info")
+            return redirect(url_for("login"))
+
+        return render_template("forgot_password.html")
+
+    @app.route("/reset-password/<token>", methods=["GET", "POST"])
+    def reset_password(token):
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        reset_request = PasswordResetToken.query.filter_by(token=token).first()
+        if not reset_request:
+            flash("That password reset link is invalid or has already been used.", "danger")
+            return redirect(url_for("login"))
+
+        if reset_request.used_at or reset_request.is_expired():
+            flash("That password reset link has expired or is no longer valid.", "warning")
+            return redirect(url_for("login"))
+
+        student = Student.query.get(reset_request.student_id)
+        if not student:
+            flash("The account associated with this reset link could not be found.", "danger")
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            password = request.form.get("password")
+            confirm_password = request.form.get("confirm_password")
+
+            if not password or not confirm_password:
+                flash("Please complete both password fields.", "danger")
+                return render_template("reset_password.html", token=token)
+
+            if password != confirm_password:
+                flash("Passwords do not match.", "danger")
+                return render_template("reset_password.html", token=token)
+
+            strength, password_feedback = evaluate_password_strength(
+                password,
+                student_id=student.student_id,
+                name=student.name,
+                email=student.email
+            )
+            if strength == "Weak":
+                flash(
+                    "Password strength: Weak. Improve it by choosing a less predictable password: "
+                    + "; ".join(password_feedback)
+                    + ".",
+                    "danger"
+                )
+                return render_template("reset_password.html", token=token)
+            if password_feedback:
+                flash(
+                    "Password strength: Medium. You can make it stronger if you "
+                    + "; ".join(password_feedback)
+                    + ".",
+                    "warning"
+                )
+
+            student.password_hash = generate_password_hash(password)
+            reset_request.used_at = datetime.utcnow()
+            db.session.commit()
+
+            flash("Your password has been reset successfully. Please login with your new password.", "success")
+            return redirect(url_for("login"))
+
+        return render_template("reset_password.html", token=token)
 
     @app.route("/admin/login", methods=["GET", "POST"])
     def admin_login():

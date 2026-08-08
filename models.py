@@ -225,6 +225,34 @@ class OrderItem(db.Model):
         }
 
 
+class PasswordResetToken(db.Model):
+    __tablename__ = "password_reset_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False
+    )
+
+    token = db.Column(db.String(128), unique=True, nullable=False, index=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    used_at = db.Column(db.DateTime)
+
+    student = db.relationship("Student", backref="password_reset_tokens")
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
+    def __repr__(self):
+        return f"<PasswordResetToken {self.token}>"
+
+
 class Feedback(db.Model):
     __tablename__ = "feedback"
 
