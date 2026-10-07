@@ -15,6 +15,7 @@ mail = Mail()
 
 STALE_LOGIN_2FA_DAYS = 7
 HIGH_VALUE_ORDER_LIMIT = 100
+ORDER_STATUSES = ("pending", "confirmed", "preparing", "ready", "completed", "cancelled")
 COMMON_WEAK_PASSWORDS = {
     "password",
     "password1",
@@ -763,27 +764,63 @@ def register_routes(app):
     @app.route("/manager/orders/modify")
     @login_required
     def manager_modify_orders():
-        """View and modify processed orders when items are not available."""
+        """Search and manage orders, including replacing unavailable items."""
         if current_user.role != "manager":
             flash("Access denied. Managers only.", "danger")
             return redirect_user_by_role(current_user)
 
+        search_term = request.args.get("q", "").strip()
         status_filter = request.args.get("status", "pending")
-        
-        if status_filter:
-            orders = Order.query.filter_by(status=status_filter).order_by(
-                Order.created_at.desc()
-            ).all()
-        else:
-            orders = Order.query.order_by(Order.created_at.desc()).all()
+        if status_filter not in ("", *ORDER_STATUSES):
+            status_filter = "pending"
+
+        orders_query = Order.query
+        if search_term:
+            orders_query = orders_query.filter(
+                Order.order_number.ilike(f"%{search_term}%")
+            )
+            status_filter = ""
+        elif status_filter:
+            orders_query = orders_query.filter_by(status=status_filter)
+        orders = orders_query.order_by(Order.created_at.desc()).all()
 
         available_items = MenuItem.query.filter_by(is_available=True).all()
         return render_template(
             "manager_modify_orders.html",
             orders=orders,
             available_items=available_items,
-            status_filter=status_filter
+            status_filter=status_filter,
+            search_term=search_term,
+            order_statuses=ORDER_STATUSES
         )
+
+    @app.route("/manager/order/<int:order_id>/status", methods=["POST"])
+    @login_required
+    def update_order_status(order_id):
+        """Update an order's status, including reopening completed orders."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        order = Order.query.get_or_404(order_id)
+        new_status = request.form.get("status", "").strip()
+        if new_status not in ORDER_STATUSES:
+            flash("Select a valid order status.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
+
+        previous_status = order.status
+        order.status = new_status
+        db.session.commit()
+
+        flash(
+            f"Order {order.order_number} status changed from "
+            f"{previous_status.title()} to {new_status.title()}.",
+            "success"
+        )
+        search_term = request.form.get("order_search", "").strip()
+        if search_term:
+            return redirect(url_for("manager_modify_orders", q=search_term))
+        return redirect(url_for("manager_modify_orders", status=new_status))
 
     @app.route("/manager/order/<int:order_id>/modify-items", methods=["POST"])
     @login_required
