@@ -28,7 +28,7 @@ class Config:
     MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "False").lower() == "true"   # port 465 = SSL
     MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "True").lower() == "true"  # port 587 = TLS
     MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "benhailelpadrey@gmail.com")
-    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "tnqa hesa livx bjxu")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "vmac tzpa frai pwgl")
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER") or MAIL_USERNAME
 
 
