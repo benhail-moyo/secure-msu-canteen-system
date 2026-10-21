@@ -41,8 +41,8 @@
                             <div class="col-md-6 mb-3">
                                 <label for="price" class="form-label">Price ($) *</label>
                                 <input type="number" class="form-control" id="price" name="price" 
-                                       step="0.01" min="0" value="{{ "%.2f"|format(item.price) if item else '' }}" required>
-                                <div class="form-text">Price in USD</div>
+                                       step="0.01" min="0.01" max="1.50" value="{{ "%.2f"|format(item.price) if item else '' }}" required>
+                                <div class="form-text">Price in USD. Maximum $1.50 per item; water $0.30.</div>
                             </div>
 
                             <div class="col-md-6 mb-3">
@@ -74,9 +74,9 @@
 
                         <div class="mb-3">
                             <label for="image_url" class="form-label">Image URL <span class="text-muted">(optional)</span></label>
-                            <input type="url" class="form-control" id="image_url" name="image_url" 
+                            <input type="text" inputmode="url" class="form-control" id="image_url" name="image_url"
                                    value="{{ (item.image_url or '') if item else '' }}">
-                            <div class="form-text">Leave blank if this meal does not have an image</div>
+                            <div class="form-text">Use a web URL or app path, or leave blank if this meal does not have an image</div>
                         </div>
 
                         <div class="mb-3">

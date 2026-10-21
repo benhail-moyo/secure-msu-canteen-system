@@ -6,7 +6,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1"><i class="fas fa-list-check text-info me-2"></i>Manage Orders</h2>
-            <p class="text-muted mb-0">Modify order items when unavailable</p>
+            <p class="text-muted mb-0">Find orders, edit meals and quantities, or extend a ticket</p>
         </div>
         <a href="{{ url_for('manager_dashboard') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
@@ -24,12 +24,42 @@
         {% endif %}
     {% endwith %}
 
+    <form method="GET" action="{{ url_for('manager_modify_orders') }}" class="row g-2 align-items-end mb-3">
+        <div class="col-sm-8 col-md-6">
+            <label for="orderSearch" class="form-label">Search by order number</label>
+            <input type="search" class="form-control" id="orderSearch" name="q"
+                   value="{{ search_term }}" placeholder="Enter all or part of an order number">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-search me-1"></i>Search
+            </button>
+        </div>
+        {% if search_term %}
+            <div class="col-auto">
+                <a href="{{ url_for('manager_modify_orders') }}" class="btn btn-outline-secondary">Clear search</a>
+            </div>
+        {% endif %}
+    </form>
+
     <!-- Status Filter -->
     <div class="mb-4">
-        <div class="btn-group" role="group">
+        <div class="btn-group flex-wrap" role="group" aria-label="Filter orders by status">
+            <a href="{{ url_for('manager_modify_orders', status='') }}"
+               class="btn {% if not status_filter and not search_term %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                All
+            </a>
             <a href="{{ url_for('manager_modify_orders', status='pending') }}" 
                class="btn {% if status_filter == 'pending' %}btn-primary{% else %}btn-outline-primary{% endif %}">
                 Pending
+            </a>
+            <a href="{{ url_for('manager_modify_orders', status='confirmed') }}"
+               class="btn {% if status_filter == 'confirmed' %}btn-info{% else %}btn-outline-info{% endif %}">
+                Confirmed
+            </a>
+            <a href="{{ url_for('manager_modify_orders', status='preparing') }}"
+               class="btn {% if status_filter == 'preparing' %}btn-warning{% else %}btn-outline-warning{% endif %}">
+                Preparing
             </a>
             <a href="{{ url_for('manager_modify_orders', status='ready') }}" 
                class="btn {% if status_filter == 'ready' %}btn-success{% else %}btn-outline-success{% endif %}">
@@ -64,6 +94,30 @@
                         </div>
 
                         <div class="card-body">
+                            <form method="POST" action="{{ url_for('update_order_status', order_id=order.id) }}" class="row g-2 align-items-end mb-4">
+                                <input type="hidden" name="order_search" value="{{ search_term }}">
+                                <div class="col">
+                                    <label for="order-status-{{ order.id }}" class="form-label">Update order status</label>
+                                    <select class="form-select" id="order-status-{{ order.id }}" name="status" required>
+                                        {% for order_status in order_statuses %}
+                                            <option value="{{ order_status }}" {% if order.status == order_status %}selected{% endif %}>
+                                                {{ order_status|title }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-auto">
+                                    <button type="submit" class="btn btn-outline-primary">
+                                        <i class="fas fa-save me-1"></i>Save Status
+                                    </button>
+                                </div>
+                                {% if order.status == 'completed' %}
+                                    <div class="col-12">
+                                        <small class="text-muted">If this order was not picked up, change it to Ready for Pickup or Pending.</small>
+                                    </div>
+                                {% endif %}
+                            </form>
+
                             <h6 class="fw-bold mb-2"><i class="fas fa-user me-2"></i>Customer</h6>
                             <div class="mb-3">
                                 <p class="mb-1"><strong>{{ order.student.name }}</strong> ({{ order.student.student_id }})</p>
@@ -92,51 +146,44 @@
                                 </table>
                             </div>
 
-                            <!-- Modification Section -->
-                            {% set availability = namespace(has_unavailable=false) %}
-                            {% for item in order.items %}
-                                {% if not item.menu_item or not item.menu_item.is_available %}
-                                    {% set availability.has_unavailable = true %}
-                                {% endif %}
-                            {% endfor %}
-
-                            {% if availability.has_unavailable %}
-                                <div class="alert alert-warning" role="alert">
-                                    <i class="fas fa-exclamation-circle me-2"></i>
-                                    <strong>Action Required:</strong> Some items in this order are unavailable. Please select replacements.
-                                </div>
-
+                            {% if not order.collected_at and order.status not in ('completed', 'cancelled') %}
                                 <form method="POST" action="{{ url_for('modify_order_items', order_id=order.id) }}" class="mb-3">
-                                    <div class="border rounded p-3 bg-light">
-                                        {% for item in order.items %}
-                                            {% if not item.menu_item or not item.menu_item.is_available %}
-                                                <div class="mb-3">
-                                                    <label class="form-label">
-                                                        <strong>Replace Unavailable Item:</strong><br>
-                                                        <small class="text-muted">Originally: {{ item.menu_item.name if item.menu_item else 'Unknown Item' }} (Qty: {{ item.quantity }})</small>
-                                                    </label>
-                                                    <select class="form-select" name="modifications[{{ item.id }}]" required>
-                                                        <option value="">-- Select Alternative Item --</option>
-                                                        {% for available_item in available_items %}
-                                                            <option value="{{ available_item.id }}">
-                                                                {{ available_item.name }} (${{ "%.2f"|format(available_item.price * item.quantity) }} for {{ item.quantity }}x)
-                                                            </option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </div>
-
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-save me-2"></i>Save Modifications
-                                        </button>
-                                    </div>
+                                    <input type="hidden" name="manager_order_csrf" value="{{ manager_order_csrf }}">
+                                    <h6 class="fw-bold">Edit meals and quantities</h6>
+                                    {% for item in order.items %}
+                                        <div class="row g-2 align-items-end mb-2">
+                                            <div class="col-8">
+                                                <label class="form-label" for="meal-{{ item.id }}">Meal {{ loop.index }}</label>
+                                                <select class="form-select" id="meal-{{ item.id }}" name="meal_{{ item.id }}" required>
+                                                    {% for available_item in available_items %}
+                                                        <option value="{{ available_item.id }}" {% if item.menu_item_id == available_item.id %}selected{% endif %}>{{ available_item.name }} (${{ "%.2f"|format(available_item.price) }})</option>
+                                                    {% endfor %}
+                                                    {% if item.menu_item and not item.menu_item.is_available %}
+                                                        <option value="{{ item.menu_item.id }}" selected>{{ item.menu_item.name }} (unavailable)</option>
+                                                    {% endif %}
+                                                </select>
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label" for="quantity-{{ item.id }}">Quantity</label>
+                                                <input class="form-control" type="number" id="quantity-{{ item.id }}" name="quantity_{{ item.id }}" min="1" max="10" value="{{ item.quantity }}" required>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                    <button type="submit" class="btn btn-primary mt-2"><i class="fas fa-save me-2"></i>Save meals and quantities</button>
                                 </form>
-                            {% else %}
-                                <div class="alert alert-success" role="alert">
-                                    <i class="fas fa-check-circle me-2"></i>All items are available.
+                            {% endif %}
+
+                            {% if order.paid_at and order.ticket_code %}
+                                <div class="border-top pt-3 mb-3">
+                                    <p class="mb-2">Ticket expires: <strong>{{ ticket_expiry(order).strftime('%d %b %Y at %H:%M') }} (Zimbabwe time)</strong></p>
+                                    {% if can_extend_ticket(order) %}
+                                        <form method="POST" action="{{ url_for('extend_ticket', order_id=order.id) }}">
+                                            <input type="hidden" name="manager_order_csrf" value="{{ manager_order_csrf }}">
+                                            <button type="submit" class="btn btn-outline-success">Extend ticket by one day</button>
+                                        </form>
+                                    {% elif order.ticket_extension_days %}
+                                        <small class="text-success">One-day extension applied</small>
+                                    {% endif %}
                                 </div>
                             {% endif %}
 
@@ -159,49 +206,14 @@
     {% else %}
         <div class="alert alert-info" role="alert">
             <i class="fas fa-info-circle me-2"></i>
-            No {% if status_filter %}{{ status_filter }}{% endif %} orders found.
+            {% if search_term %}
+                No orders found matching "{{ search_term }}".
+            {% else %}
+                No {% if status_filter %}{{ status_filter }}{% else %}matching{% endif %} orders found.
+            {% endif %}
         </div>
     {% endif %}
 
 </div>
 
-<script>
-    // Parse JSON modifications on form submission
-    document.querySelectorAll('form[action*="/modify-items"]').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            const modifications = {};
-            const selects = this.querySelectorAll('select[name*="modifications"]');
-            let valid = true;
-
-            selects.forEach(select => {
-                const match = select.name.match(/modifications\[(\d+)\]/);
-                if (match) {
-                    const itemId = match[1];
-                    const selectedValue = select.value;
-                    
-                    if (!selectedValue) {
-                        valid = false;
-                        select.classList.add('is-invalid');
-                    } else {
-                        modifications[itemId] = selectedValue;
-                        select.classList.remove('is-invalid');
-                    }
-                }
-            });
-
-            if (!valid) {
-                e.preventDefault();
-                alert('Please select an alternative item for all unavailable items.');
-                return false;
-            }
-
-            // Create a hidden input with JSON data
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'modifications';
-            hiddenInput.value = JSON.stringify(modifications);
-            this.appendChild(hiddenInput);
-        });
-    });
-</script>
 {% endblock %}

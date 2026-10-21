@@ -4,17 +4,22 @@ from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import inspect, text
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import os
 import random
+import secrets
 import string
 
 from config import config
 from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback, Alert
+from tickets import load_private_key, issue_ticket, verify_ticket_payload, expiry_for
 
 mail = Mail()
 
 STALE_LOGIN_2FA_DAYS = 7
 HIGH_VALUE_ORDER_LIMIT = 100
+ORDER_STATUSES = ("pending", "confirmed", "preparing", "ready", "completed", "cancelled")
+TICKET_TIMEZONE = ZoneInfo("Africa/Harare")
 COMMON_WEAK_PASSWORDS = {
     "password",
     "password1",
@@ -35,6 +40,9 @@ def create_app(config_name=None):
 
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+    if config_name == "production" and (not os.environ.get("SECRET_KEY") or os.environ.get("SECRET_KEY") == "msu-canteen-secret-key-2026"):
+        raise RuntimeError("Configure a unique SECRET_KEY for production")
+    app.ticket_private_key = load_private_key(app)
 
     db.init_app(app)
     mail.init_app(app)
@@ -61,6 +69,9 @@ def create_app(config_name=None):
     with app.app_context():
         db.create_all()
         sync_database_schema(app)
+        for order in Order.query.filter_by(ticket_code=None).all():
+            order.ticket_code = secrets.token_hex(8).upper()
+        db.session.commit()
         seed_database()
 
     return app
@@ -83,6 +94,15 @@ def sync_database_schema(app):
             if "last_2fa_at" not in columns:
                 with db.engine.begin() as connection:
                     connection.execute(text("ALTER TABLE students ADD COLUMN last_2fa_at DATETIME"))
+
+        if "orders" in existing_tables:
+            columns = {col["name"] for col in inspector.get_columns("orders")}
+            if "ticket_extension_days" not in columns:
+                with db.engine.begin() as connection:
+                    connection.execute(text("ALTER TABLE orders ADD COLUMN ticket_extension_days INTEGER NOT NULL DEFAULT 0"))
+            else:
+                with db.engine.begin() as connection:
+                    connection.execute(text("UPDATE orders SET ticket_extension_days = 0 WHERE ticket_extension_days IS NULL"))
 
         inspector = inspect(db.engine)
         for table in db.metadata.sorted_tables:
@@ -216,24 +236,32 @@ def register_routes(app):
         db.session.commit()
         login_user(student)
 
-    def create_order_from_cart(student, notes=None):
+    def create_order_from_cart(student, payment_method=None):
         cart_data = session.get("cart", {})
+        if not cart_data or any(
+            not isinstance(quantity, int) or not 1 <= quantity <= 10 or
+            not (item := db.session.get(MenuItem, int(item_id))) or not item.is_available
+            for item_id, quantity in cart_data.items()
+        ):
+            raise ValueError("Cart changed or contains unavailable items")
         order_number = generate_order_number()
         total = 0
 
         order = Order(
             order_number=order_number,
+            ticket_code=secrets.token_hex(8).upper(),
+            payment_method=payment_method,
+            paid_at=datetime.utcnow(),
             student_id=student.id,
             total_amount=0,
-            notes=notes,
-            estimated_ready_time=datetime.utcnow() + timedelta(minutes=20)
+            notes=None
         )
         db.session.add(order)
         db.session.flush()
 
         for item_id, quantity in cart_data.items():
             item = MenuItem.query.get(int(item_id))
-            if item and item.is_available:
+            if item and item.is_available and isinstance(quantity, int) and 1 <= quantity <= 10:
                 subtotal = item.price * quantity
                 total += subtotal
                 db.session.add(OrderItem(
@@ -300,11 +328,23 @@ def register_routes(app):
                     "warning"
                 )
 
-            if Student.query.filter_by(student_id=student_id).first():
+            existing_id = Student.query.filter_by(student_id=student_id).first()
+            existing_email = Student.query.filter_by(email=email).first()
+
+            if (existing_id is not None and existing_id == existing_email
+                    and existing_id.role == "student" and not existing_id.is_verified
+                    and check_password_hash(existing_id.password_hash, password)):
+                if not start_2fa(existing_id, "registration", "complete your registration"):
+                    flash("Unable to send verification email right now. Please try again later.", "danger")
+                    return render_template("register.html")
+                flash("Please check your email for the verification code.", "success")
+                return redirect(url_for("verify_2fa"))
+
+            if existing_id:
                 flash("Student ID already registered.", "danger")
                 return render_template("register.html")
 
-            if Student.query.filter_by(email=email).first():
+            if existing_email:
                 flash("Email already registered.", "danger")
                 return render_template("register.html")
 
@@ -367,9 +407,20 @@ def register_routes(app):
                         if not current_user.is_authenticated or current_user.id != student.id:
                             flash("Please log in again before completing this order.", "danger")
                             return redirect(url_for("login"))
+                        if session.get("cart") != session.get("pending_order_cart"):
+                            flash("Cart changed during verification. Please check out again.", "danger")
+                            session.pop("pending_order_cart", None)
+                            return redirect(url_for("checkout"))
                         db.session.commit()
-                        notes = session.get('pending_order_notes')
-                        order = create_order_from_cart(student, notes=notes)
+                        payment_method = session.get('pending_payment_method')
+                        if payment_method not in ("ecocash", "gold_card", "bank_account"):
+                            flash("Payment selection expired. Please return to checkout.", "danger")
+                            return redirect(url_for("checkout"))
+                        try:
+                            order = create_order_from_cart(student, payment_method=payment_method)
+                        except ValueError:
+                            flash("Cart items changed. Please check out again.", "danger")
+                            return redirect(url_for("checkout"))
                         success_message = f"Order placed successfully! Order number: {order.order_number}"
                         redirect_response = redirect(url_for("order_confirmation", order_id=order.id))
                     else:
@@ -379,7 +430,8 @@ def register_routes(app):
                     session.pop('2fa_code', None)
                     session.pop('pending_user_id', None)
                     session.pop('2fa_purpose', None)
-                    session.pop('pending_order_notes', None)
+                    session.pop('pending_payment_method', None)
+                    session.pop('pending_order_cart', None)
                     flash(success_message, "success")
                     return redirect_response
                 else:
@@ -523,6 +575,87 @@ def register_routes(app):
         orders = Order.query.order_by(Order.created_at.desc()).all()
         return render_template("staff_dashboard.html", orders=orders)
 
+    def ticket_error(order):
+        if not order:
+            return "Invalid ticket code or registration number."
+        if not order.paid_at:
+            return "Ticket has no confirmed payment."
+        if order.collected_at:
+            return "Ticket already collected."
+        if order.status == "cancelled":
+            return "Order was cancelled."
+        if order.status == "completed":
+            return "Order already completed."
+        if not order.created_at or datetime.now(TICKET_TIMEZONE) >= expiry_for(order.created_at, order.ticket_extension_days or 0):
+            return "Ticket expired."
+        return None
+
+    @app.route("/staff/serve")
+    @login_required
+    def serve_orders():
+        if current_user.role != "staff":
+            return redirect_user_by_role(current_user)
+        token = secrets.token_urlsafe(32)
+        session["serve_csrf"] = token
+        return render_template("serve_orders.html", serve_csrf=token)
+
+    @app.route("/staff/serve/verify", methods=["POST"])
+    @login_required
+    def verify_ticket():
+        if current_user.role != "staff":
+            return jsonify(error="Staff access required."), 403
+        if request.headers.get("X-Serve-CSRF") != session.get("serve_csrf") or not session.get("serve_csrf"):
+            return jsonify(error="Session expired. Reload this page."), 403
+        data = request.get_json(silent=True) or {}
+        scanned_value = str(data.get("code", "")).strip()
+        code = scanned_value.upper()
+        reg = str(data.get("registration", "")).strip()
+        if not code or (data.get("mode") == "manual" and not reg):
+            return jsonify(error="Enter both registration number and ticket code."), 400
+        if data.get("mode") == "scan" and scanned_value.startswith("MSUT1."):
+            payload = verify_ticket_payload(scanned_value, app.ticket_private_key.public_key())
+            if not payload:
+                return jsonify(error="Invalid ticket signature."), 400
+            order = db.session.get(Order, payload["id"])
+            if not order or order.ticket_code != payload.get("code") or order.student.student_id != payload.get("reg") or not order.created_at or payload.get("exp") not in (int(expiry_for(order.created_at, days).timestamp()) for days in range((order.ticket_extension_days or 0) + 1)):
+                return jsonify(error="Ticket details do not match the server."), 400
+        else:
+            order = Order.query.filter_by(ticket_code=code).first()
+        if order and reg and order.student.student_id.casefold() != reg.casefold():
+            order = None
+        error = ticket_error(order)
+        if error:
+            return jsonify(error=error), 400
+        return jsonify(order_id=order.id, code=order.ticket_code,
+                       registration=order.student.student_id,
+                       items=[{"name": item.menu_item.name, "quantity": item.quantity} for item in order.items])
+
+    @app.route("/staff/serve/approve", methods=["POST"])
+    @login_required
+    def approve_ticket():
+        if current_user.role != "staff":
+            return jsonify(error="Staff access required."), 403
+        if request.headers.get("X-Serve-CSRF") != session.get("serve_csrf") or not session.get("serve_csrf"):
+            return jsonify(error="Session expired. Reload this page."), 403
+        data = request.get_json(silent=True) or {}
+        code = str(data.get("code", "")).strip().upper()
+        reg = str(data.get("registration", "")).strip()
+        # The conditional update prevents a second concurrent approval from collecting twice.
+        order = Order.query.filter_by(ticket_code=code).first()
+        if order and order.student.student_id.casefold() != reg.casefold():
+            order = None
+        error = ticket_error(order)
+        if error:
+            return jsonify(error=error), 400
+        changed = Order.query.filter_by(id=order.id, collected_at=None).update({
+            "collected_at": datetime.utcnow(), "collected_by_id": current_user.id,
+            "status": "completed"}, synchronize_session=False)
+        if not changed:
+            db.session.rollback()
+            return jsonify(error="Ticket already collected."), 400
+        db.session.commit()
+        return jsonify(message="Meal collected successfully.")
+
     # ─────────────────────────────────────────────
     # MANAGER ROUTES  (Manager only)
     # ─────────────────────────────────────────────
@@ -572,10 +705,10 @@ def register_routes(app):
 
             try:
                 price = float(price)
-                if price < 0:
+                if not 0 < price <= (0.30 if name.casefold() == "water" else 1.50):
                     raise ValueError("Price must be positive")
             except ValueError:
-                flash("Price must be a valid positive number.", "danger")
+                flash("Price must be between $0.01 and $1.50 ($0.30 maximum for water).", "danger")
                 categories = Category.query.filter_by(is_active=True).all()
                 return render_template("manager_meal_form.html", categories=categories)
 
@@ -626,11 +759,11 @@ def register_routes(app):
             if price:
                 try:
                     price = float(price)
-                    if price < 0:
+                    if not 0 < price <= (0.30 if item.name.casefold() == "water" else 1.50):
                         raise ValueError("Price must be positive")
                     item.price = price
                 except ValueError:
-                    flash("Price must be a valid positive number.", "danger")
+                    flash("Price must be between $0.01 and $1.50 ($0.30 maximum for water).", "danger")
                     categories = Category.query.filter_by(is_active=True).all()
                     return render_template("manager_meal_form.html", item=item, categories=categories)
 
@@ -658,6 +791,10 @@ def register_routes(app):
             item.is_vegan = request.form.get("is_vegan") == "on"
             item.is_gluten_free = request.form.get("is_gluten_free") == "on"
             item.is_available = request.form.get("is_available") == "on"
+            if item.name.casefold() == "water" and item.price > 0.30:
+                flash("Water cannot cost more than $0.30.", "danger")
+                categories = Category.query.filter_by(is_active=True).all()
+                return render_template("manager_meal_form.html", item=item, categories=categories)
 
             db.session.commit()
             flash(f"Meal '{item.name}' updated successfully!", "success")
@@ -763,103 +900,134 @@ def register_routes(app):
     @app.route("/manager/orders/modify")
     @login_required
     def manager_modify_orders():
-        """View and modify processed orders when items are not available."""
+        """Search and manage orders, including replacing unavailable items."""
         if current_user.role != "manager":
             flash("Access denied. Managers only.", "danger")
             return redirect_user_by_role(current_user)
 
+        search_term = request.args.get("q", "").strip()
         status_filter = request.args.get("status", "pending")
-        
-        if status_filter:
-            orders = Order.query.filter_by(status=status_filter).order_by(
-                Order.created_at.desc()
-            ).all()
-        else:
-            orders = Order.query.order_by(Order.created_at.desc()).all()
+        if status_filter not in ("", *ORDER_STATUSES):
+            status_filter = "pending"
+
+        orders_query = Order.query
+        if search_term:
+            orders_query = orders_query.filter(
+                Order.order_number.ilike(f"%{search_term}%")
+            )
+            status_filter = ""
+        elif status_filter:
+            orders_query = orders_query.filter_by(status=status_filter)
+        orders = orders_query.order_by(Order.created_at.desc()).all()
 
         available_items = MenuItem.query.filter_by(is_available=True).all()
+        session["manager_order_csrf"] = secrets.token_urlsafe(32)
         return render_template(
             "manager_modify_orders.html",
             orders=orders,
             available_items=available_items,
-            status_filter=status_filter
+            manager_order_csrf=session["manager_order_csrf"],
+            ticket_expiry=lambda order: expiry_for(order.created_at, order.ticket_extension_days or 0),
+            can_extend_ticket=lambda order: order.paid_at and order.ticket_code and not order.collected_at
+                and order.status not in ("completed", "cancelled") and not order.ticket_extension_days
+                and order.created_at and datetime.now(TICKET_TIMEZONE) < expiry_for(order.created_at, 1),
+            status_filter=status_filter,
+            search_term=search_term,
+            order_statuses=ORDER_STATUSES
         )
 
-    @app.route("/manager/order/<int:order_id>/modify-items", methods=["POST"])
+    @app.route("/manager/order/<int:order_id>/status", methods=["POST"])
     @login_required
-    def modify_order_items(order_id):
-        """Modify order items when original items are not available."""
+    def update_order_status(order_id):
+        """Update an order's status, including reopening completed orders."""
         if current_user.role != "manager":
             flash("Access denied. Managers only.", "danger")
             return redirect_user_by_role(current_user)
 
         order = Order.query.get_or_404(order_id)
-        modifications = request.form.get("modifications")
+        new_status = request.form.get("status", "").strip()
+        if new_status not in ORDER_STATUSES:
+            flash("Select a valid order status.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
 
-        import json
-
-        mods = {}
-        if modifications:
-            try:
-                parsed_mods = json.loads(modifications)
-                if isinstance(parsed_mods, dict):
-                    mods.update(parsed_mods)
-            except json.JSONDecodeError:
-                flash("Invalid modification data.", "danger")
-                return redirect(url_for("manager_modify_orders", status=order.status))
-
-        for field_name, value in request.form.items():
-            if field_name.startswith("modifications[") and field_name.endswith("]"):
-                order_item_id = field_name[len("modifications["):-1]
-                mods[order_item_id] = value
-
-        mods = {
-            order_item_id: new_item_id
-            for order_item_id, new_item_id in mods.items()
-            if str(new_item_id).strip()
-        }
-
-        if not mods:
-            flash("Please select at least one replacement item.", "warning")
-            return redirect(url_for("manager_modify_orders", status=order.status))
-
-        # Apply modifications to order items
-        modified_count = 0
-        for order_item_id, new_item_id in mods.items():
-            try:
-                order_item_id = int(order_item_id)
-                new_item_id = int(new_item_id)
-            except (TypeError, ValueError):
-                flash("Invalid replacement selection.", "danger")
-                return redirect(url_for("manager_modify_orders", status=order.status))
-
-            order_item = OrderItem.query.get(order_item_id)
-            if not order_item or order_item.order_id != order_id:
-                flash("Invalid order item selected.", "danger")
-                return redirect(url_for("manager_modify_orders", status=order.status))
-
-            new_item = MenuItem.query.get(new_item_id)
-            if not new_item or not new_item.is_available:
-                flash("Selected replacement item is not available.", "warning")
-                return redirect(url_for("manager_modify_orders", status=order.status))
-
-            order_item.menu_item_id = new_item.id
-            order_item.unit_price = new_item.price
-            order_item.subtotal = new_item.price * order_item.quantity
-            modified_count += 1
-
-        if not modified_count:
-            flash("No order items were modified.", "warning")
-            return redirect(url_for("manager_modify_orders", status=order.status))
-
-        order.total_amount = sum(item.subtotal for item in order.items)
-        modification_note = "[Manager Modified Items]"
-        if modification_note not in (order.notes or ""):
-            order.notes = f"{order.notes.rstrip()}\n{modification_note}" if order.notes else modification_note
+        previous_status = order.status
+        if order.collected_at and new_status != "completed":
+            flash("Collected orders cannot be reopened.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
+        order.status = new_status
         db.session.commit()
 
-        flash("Order items modified successfully!", "success")
-        return redirect(url_for("manager_modify_orders", status=order.status))
+        flash(
+            f"Order {order.order_number} status changed from "
+            f"{previous_status.title()} to {new_status.title()}.",
+            "success"
+        )
+        search_term = request.form.get("order_search", "").strip()
+        if search_term:
+            return redirect(url_for("manager_modify_orders", q=search_term))
+        return redirect(url_for("manager_modify_orders", status=new_status))
+
+    @app.route("/manager/order/<int:order_id>/modify-items", methods=["POST"])
+    @login_required
+    def modify_order_items(order_id):
+        """Edit each meal and quantity in an order."""
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+
+        order = Order.query.get_or_404(order_id)
+        if not session.get("manager_order_csrf") or not secrets.compare_digest(request.form.get("manager_order_csrf", ""), session["manager_order_csrf"]):
+            flash("Manager session expired. Reload the order page.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
+        if order.collected_at or order.status in ("completed", "cancelled"):
+            flash("Collected, completed, or cancelled orders cannot be edited.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
+
+        changes = []
+        for order_item in order.items:
+            try:
+                new_item_id = int(request.form.get(f"meal_{order_item.id}"))
+                quantity = int(request.form.get(f"quantity_{order_item.id}"))
+            except (TypeError, ValueError):
+                flash("Select a valid meal and quantity for every item.", "danger")
+                return redirect(url_for("manager_modify_orders", q=order.order_number))
+            new_item = db.session.get(MenuItem, new_item_id)
+            if (not new_item or not 1 <= quantity <= 10 or
+                    (not new_item.is_available and new_item.id != order_item.menu_item_id)):
+                flash("Select an available meal and a quantity from 1 to 10.", "danger")
+                return redirect(url_for("manager_modify_orders", q=order.order_number))
+            changes.append((order_item, new_item, quantity))
+
+        for order_item, new_item, quantity in changes:
+            order_item.menu_item_id = new_item.id
+            order_item.quantity = quantity
+            order_item.unit_price = new_item.price
+            order_item.subtotal = round(new_item.price * quantity, 2)
+
+        order.total_amount = round(sum(item.subtotal for item in order.items), 2)
+        db.session.commit()
+        flash("Order meals and quantities updated.", "success")
+        return redirect(url_for("manager_modify_orders", q=order.order_number))
+
+    @app.route("/manager/order/<int:order_id>/extend-ticket", methods=["POST"])
+    @login_required
+    def extend_ticket(order_id):
+        if current_user.role != "manager":
+            flash("Access denied. Managers only.", "danger")
+            return redirect_user_by_role(current_user)
+        order = Order.query.get_or_404(order_id)
+        if not session.get("manager_order_csrf") or not secrets.compare_digest(request.form.get("manager_order_csrf", ""), session["manager_order_csrf"]):
+            flash("Manager session expired. Reload the order page.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
+        if (not order.paid_at or not order.ticket_code or order.collected_at or
+                order.status in ("completed", "cancelled") or order.ticket_extension_days or
+                not order.created_at or datetime.now(TICKET_TIMEZONE) >= expiry_for(order.created_at, 1)):
+            flash("This ticket cannot be extended.", "danger")
+            return redirect(url_for("manager_modify_orders", q=order.order_number))
+        order.ticket_extension_days = 1
+        db.session.commit()
+        flash("Ticket extended by one day. The holder will see the new expiry on their ticket.", "success")
+        return redirect(url_for("manager_modify_orders", q=order.order_number))
 
     # ─────────────────────────────────────────────
     # MENU  (accessible to ALL authenticated roles)
@@ -925,9 +1093,12 @@ def register_routes(app):
             flash("This item is currently unavailable.", "danger")
             return redirect(url_for("menu"))
 
-        quantity = int(request.form.get("quantity", 1))
+        quantity = request.form.get("quantity", 1, type=int)
+        if quantity is None or not 1 <= quantity <= 10:
+            flash("Choose a quantity from 1 to 10.", "danger")
+            return redirect(url_for("menu"))
         cart_data = session.get("cart", {})
-        cart_data[str(item_id)] = cart_data.get(str(item_id), 0) + quantity
+        cart_data[str(item_id)] = min(10, cart_data.get(str(item_id), 0) + quantity)
         session["cart"] = cart_data
 
         flash(f"{item.name} added to cart!", "success")
@@ -935,7 +1106,10 @@ def register_routes(app):
 
     @app.route("/cart/update/<int:item_id>", methods=["POST"])
     def update_cart(item_id):
-        quantity = int(request.form.get("quantity", 0))
+        quantity = request.form.get("quantity", 0, type=int)
+        if quantity is None or quantity > 10:
+            flash("Choose a quantity from 1 to 10.", "danger")
+            return redirect(url_for("cart"))
         cart_data = session.get("cart", {})
 
         if quantity > 0:
@@ -979,31 +1153,44 @@ def register_routes(app):
 
         for item_id, quantity in cart_data.items():
             item = MenuItem.query.get(int(item_id))
-            if item and item.is_available:
+            if item and item.is_available and isinstance(quantity, int) and 1 <= quantity <= 10:
                 subtotal = item.price * quantity
                 order_items.append({"item": item, "quantity": quantity, "subtotal": subtotal})
                 total += subtotal
 
-        if request.method == "POST":
-            notes = request.form.get("notes")
+        if not order_items or len(order_items) != len(cart_data):
+            flash("Some cart items are unavailable. Review your cart before paying.", "danger")
+            return redirect(url_for("cart"))
 
+        if request.method == "POST":
+            if not session.get("checkout_csrf") or not secrets.compare_digest(request.form.get("checkout_csrf", ""), session["checkout_csrf"]):
+                flash("Checkout session expired. Please try again.", "danger")
+                return redirect(url_for("checkout"))
+            payment_method = request.form.get("payment_method")
+            payment_reference = request.form.get("payment_reference", "").strip()
+            if payment_method not in ("ecocash", "gold_card", "bank_account") or not (4 <= len(payment_reference) <= 50):
+                flash("Choose a payment option and enter a demo account or phone identifier (4–50 characters).", "danger")
+                return redirect(url_for("checkout"))
             if total > HIGH_VALUE_ORDER_LIMIT:
                 if not start_2fa(
                     current_user,
                     "high_value_order",
                     f"confirm your ${total:.2f} order",
-                    pending_order_notes=notes or ""
+                    pending_payment_method=payment_method,
+                    pending_order_cart=dict(cart_data)
                 ):
                     flash("Unable to send verification email right now. Please try again later.", "danger")
-                    return render_template("checkout.html", order_items=order_items, total=total)
+                    return render_template("checkout.html", order_items=order_items, total=total, checkout_csrf=session["checkout_csrf"])
                 flash("Please verify this order with the code sent to your email.", "warning")
                 return redirect(url_for("verify_2fa"))
 
-            order = create_order_from_cart(current_user, notes=notes)
-            flash(f"Order placed successfully! Order number: {order.order_number}", "success")
+            order = create_order_from_cart(current_user, payment_method=payment_method)
+            session.pop("checkout_csrf", None)
+            flash(f"Demo payment successful! Order number: {order.order_number}", "success")
             return redirect(url_for("order_confirmation", order_id=order.id))
 
-        return render_template("checkout.html", order_items=order_items, total=total)
+        session["checkout_csrf"] = secrets.token_urlsafe(32)
+        return render_template("checkout.html", order_items=order_items, total=total, checkout_csrf=session["checkout_csrf"])
 
     @app.route("/order/<int:order_id>")
     @login_required
@@ -1014,7 +1201,9 @@ def register_routes(app):
             flash("Access denied.", "danger")
             return redirect(url_for("menu"))
 
-        return render_template("order_confirmation.html", order=order)
+        signed_ticket = issue_ticket(order, app.ticket_private_key) if order.paid_at and order.ticket_code else None
+        expires_at = expiry_for(order.created_at, order.ticket_extension_days or 0) if signed_ticket else None
+        return render_template("order_confirmation.html", order=order, signed_ticket=signed_ticket, expires_at=expires_at)
 
     @app.route("/orders")
     @login_required
@@ -1036,14 +1225,7 @@ def register_routes(app):
         if current_user.role == "student" and order.student_id != current_user.id:
             return jsonify({"error": "Access denied"}), 403
 
-        return jsonify({
-            "order_number": order.order_number,
-            "status": order.status,
-            "estimated_ready_time": (
-                order.estimated_ready_time.isoformat()
-                if order.estimated_ready_time else None
-            )
-        })
+        return jsonify({"order_number": order.order_number, "status": order.status})
 
     @app.route("/order/<int:order_id>/feedback", methods=["GET", "POST"])
     @login_required
@@ -1181,10 +1363,7 @@ def generate_order_number():
 
 
 def seed_database():
-    """Add default categories and menu items if database is empty."""
-    if Category.query.first():
-        return
-
+    """Seed and refresh the affordable Zimbabwean canteen menu."""
     categories = [
         Category(name="Main Meals", description="Hearty main dishes", icon="utensils", display_order=1),
         Category(name="Fast Food", description="Quick bites and snacks", icon="hamburger", display_order=2),
@@ -1192,37 +1371,48 @@ def seed_database():
         Category(name="Snacks", description="Light snacks and treats", icon="cookie", display_order=4),
         Category(name="Vegetarian", description="Vegetarian options", icon="leaf", display_order=5),
     ]
-    for category in categories:
-        db.session.add(category)
-    db.session.commit()
+    if not Category.query.first():
+        db.session.add_all(categories)
+        db.session.flush()
 
-    menu_items = [
-        MenuItem(name="Chicken Stew", description="Tender chicken in rich tomato sauce with vegetables", price=45.00, category_id=1, preparation_time=20, calories=450),
-        MenuItem(name="Beef Sadza", description="Traditional sadza with tender beef and vegetables", price=50.00, category_id=1, preparation_time=25, calories=550),
-        MenuItem(name="Fish and Chips", description="Crispy fried fish with golden chips", price=55.00, category_id=1, preparation_time=15, calories=480),
-        MenuItem(name="Pasta Carbonara", description="Creamy pasta with bacon and parmesan", price=40.00, category_id=1, preparation_time=15, calories=520),
-        MenuItem(name="Rice and Stew", description="Steamed rice with vegetable stew", price=35.00, category_id=1, preparation_time=15, calories=380),
-        MenuItem(name="Hamburger", description="Beef patty with lettuce, tomato, and special sauce", price=30.00, category_id=2, preparation_time=10, calories=380),
-        MenuItem(name="Chicken Wrap", description="Grilled chicken with fresh vegetables in a wrap", price=35.00, category_id=2, preparation_time=8, calories=320),
-        MenuItem(name="Pizza Slice", description="Cheese and tomato pizza slice", price=15.00, category_id=2, preparation_time=5, calories=250),
-        MenuItem(name="Hot Dog", description="Grilled sausage in a bun with toppings", price=20.00, category_id=2, preparation_time=5, calories=290),
-        MenuItem(name="Fresh Juice", description="Mixed fruit juice seasonal", price=20.00, category_id=3, preparation_time=3, calories=120),
-        MenuItem(name="Coffee", description="Hot brewed coffee", price=15.00, category_id=3, preparation_time=2, calories=5),
-        MenuItem(name="Tea", description="Hot tea with milk and sugar", price=10.00, category_id=3, preparation_time=2, calories=40),
-        MenuItem(name="Soft Drink", description="Assorted soft drinks 350ml", price=12.00, category_id=3, preparation_time=1, calories=140),
-        MenuItem(name="Water", description="Bottled water 500ml", price=8.00, category_id=3, preparation_time=1, calories=0),
-        MenuItem(name="Sandwich", description="Ham and cheese sandwich", price=25.00, category_id=4, preparation_time=5, calories=280),
-        MenuItem(name="Samosa", description="Crispy vegetable samosa 2 pieces", price=15.00, category_id=4, preparation_time=5, calories=200),
-        MenuItem(name="Fried Chips", description="Seasoned fried potato chips", price=20.00, category_id=4, preparation_time=8, calories=310),
-        MenuItem(name="Fruit Salad", description="Fresh seasonal fruits", price=25.00, category_id=4, preparation_time=5, calories=150),
-        MenuItem(name="Vegetable Curry", description="Mixed vegetables in creamy curry sauce", price=35.00, category_id=5, preparation_time=15, calories=320, is_vegetarian=True, is_vegan=True),
-        MenuItem(name="Bean Stew", description="Hearty bean stew with rice", price=30.00, category_id=5, preparation_time=15, calories=280, is_vegetarian=True, is_vegan=True),
-        MenuItem(name="Veggie Burger", description="Plant-based burger with all the toppings", price=40.00, category_id=5, preparation_time=10, calories=350, is_vegetarian=True, is_vegan=True),
-    ]
-    for item in menu_items:
-        db.session.add(item)
+    menu = {
+        "Chicken Stew": (1.50, "Chicken stew served with sadza", "Main Meals"),
+        "Beef Sadza": (1.50, "Sadza with beef stew and vegetables", "Main Meals"),
+        "Rice and Stew": (1.20, "Rice with vegetable stew", "Main Meals"),
+        "Sadza and Beans": (0.80, "Sadza with sugar beans and vegetables", "Main Meals"),
+        "Sadza and Vegetables": (0.70, "Sadza with seasonal greens", "Vegetarian"),
+        "Rice and Chicken": (1.50, "Rice with chicken stew", "Main Meals"),
+        "Maputi": (0.40, "Roasted maize snack", "Snacks"),
+        "Fried Chips": (0.80, "Freshly fried potato chips", "Snacks"),
+        "Samosa": (0.50, "Vegetable samosa", "Snacks"),
+        "Banana": (0.30, "Fresh banana", "Snacks"),
+        "Tea": (0.30, "Hot tea", "Beverages"),
+        "Water": (0.30, "Bottled water 500ml", "Beverages"),
+        "Bean Stew": (1.00, "Sugar beans served with rice", "Vegetarian"),
+    }
+    category_ids = {category.name: category.id for category in Category.query.all()}
+    retired_items = {"Fish and Chips", "Pasta Carbonara", "Hamburger", "Chicken Wrap",
+                     "Pizza Slice", "Hot Dog", "Fresh Juice", "Coffee", "Soft Drink",
+                     "Sandwich", "Fruit Salad", "Vegetable Curry", "Veggie Burger"}
+    for item in MenuItem.query.all():
+        if item.name in menu:
+            price, description, category = menu[item.name]
+            if item.price > 1.50 or (item.name == "Water" and item.price != 0.30):
+                item.price = price
+            item.description = description
+            item.category_id = category_ids[category]
+        elif item.name in retired_items:
+            if item.order_items.count():
+                item.is_available = False
+            else:
+                db.session.delete(item)
+        elif item.price > 1.50:
+            item.is_available = False
+    for name, (price, description, category) in menu.items():
+        if not MenuItem.query.filter_by(name=name).first():
+            db.session.add(MenuItem(name=name, price=price, description=description,
+                                    category_id=category_ids[category], is_available=True))
     db.session.commit()
-    print("Database seeded successfully!")
 
 
 if __name__ == "__main__":
