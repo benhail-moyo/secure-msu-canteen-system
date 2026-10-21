@@ -10,7 +10,18 @@
                     <h2 class="mb-3">Order Placed Successfully!</h2>
                     <p class="text-muted">Thank you for your order. Your order number is:</p>
                     <h3 class="text-primary mb-4">{{ order.order_number }}</h3>
-                    <div class="alert alert-info"><i class="fas fa-clock me-2"></i>Estimated ready time: <strong>{{ order.estimated_ready_time.strftime('%I:%M %p') }}</strong></div>
+                    {% if current_user.role == 'student' and signed_ticket %}
+                    <div class="border rounded p-3 mb-4" aria-label="Meal ticket">
+                        <h5>Meal ticket</h5>
+                        <div id="ticket-qr" class="d-flex justify-content-center mb-3"></div>
+                        <svg id="ticket-barcode" class="mw-100"></svg>
+                        <p class="mb-1">Ticket code: <strong>{{ order.ticket_code }}</strong></p>
+                        <p class="mb-1">Registration number: <strong>{{ current_user.student_id }}</strong></p>
+                        <p class="mb-1">Expires: <strong>{{ expires_at.strftime('%d %b %Y at %H:%M') }} (Zimbabwe time)</strong></p>
+                        <small class="text-muted">Show the signed QR code or barcode, or give staff both details above. The ticket can be collected once.</small>
+                        <div class="mt-3"><button type="button" id="download-ticket" class="btn btn-success" disabled><i class="fas fa-download me-2"></i>Download ticket (PNG)</button></div>
+                    </div>
+                    {% endif %}
                     <hr>
                     <div class="text-start">
                         <h5>Order Details</h5>
@@ -34,4 +45,78 @@
         </div>
     </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+{% if current_user.role == 'student' and signed_ticket %}
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.1/dist/JsBarcode.all.min.js"></script>
+<script>
+const ticketCode = {{ order.ticket_code|tojson }};
+const signedTicket = {{ signed_ticket|tojson }};
+if (window.QRCode) new QRCode(document.getElementById('ticket-qr'), {text: signedTicket, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.L});
+if (window.JsBarcode) JsBarcode('#ticket-barcode', ticketCode, {format: 'CODE128', width: 2, height: 55});
+const downloadButton = document.getElementById('download-ticket');
+const qrContainer = document.getElementById('ticket-qr');
+const barcodeElement = document.getElementById('ticket-barcode');
+function readyQr() {
+  const qrImage = qrContainer.querySelector('img');
+  const qrCanvas = qrContainer.querySelector('canvas');
+  return qrImage && qrImage.complete && qrImage.naturalWidth ? qrImage : qrCanvas;
+}
+const qrWatcher = setInterval(() => {
+  if (readyQr() && barcodeElement.querySelector('rect')) {
+    downloadButton.disabled = false;
+    clearInterval(qrWatcher);
+  }
+}, 100);
+downloadButton.addEventListener('click', async () => {
+  const qr = readyQr();
+  if (!qr || !barcodeElement.querySelector('rect')) return;
+  downloadButton.disabled = true;
+  const barcodeImage = new Image();
+  const barcodeSvg = new XMLSerializer().serializeToString(barcodeElement);
+  barcodeImage.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(barcodeSvg);
+  try {
+    await barcodeImage.decode();
+  } catch (error) {
+    downloadButton.disabled = false;
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = 720;
+  canvas.height = 950;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#155724';
+  context.font = 'bold 34px Arial';
+  context.textAlign = 'center';
+  context.fillText('MSU Canteen Meal Ticket', 360, 65);
+  context.fillStyle = '#222';
+  context.font = '22px Arial';
+  context.fillText('Order: ' + {{ order.order_number|tojson }}, 360, 112);
+  context.drawImage(qr, 150, 135, 420, 420);
+  const barcodeWidth = Math.min(600, barcodeImage.width);
+  const barcodeHeight = barcodeImage.height * barcodeWidth / barcodeImage.width;
+  context.drawImage(barcodeImage, (canvas.width - barcodeWidth) / 2, 570, barcodeWidth, barcodeHeight);
+  context.font = 'bold 25px Arial';
+  context.fillText('Ticket code: ' + ticketCode, 360, 740);
+  context.font = '22px Arial';
+  context.fillText('Registration: ' + {{ current_user.student_id|tojson }}, 360, 785);
+  context.fillText('Expires: ' + {{ expires_at.strftime('%d %b %Y %H:%M')|tojson }} + ' (Zimbabwe time)', 360, 830);
+  context.font = '18px Arial';
+  context.fillText('Show this ticket to collect your meal once.', 360, 885);
+  canvas.toBlob(blob => {
+    downloadButton.disabled = false;
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'MSU-meal-ticket-' + ticketCode + '.png';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+});
+</script>
+{% endif %}
 {% endblock %}

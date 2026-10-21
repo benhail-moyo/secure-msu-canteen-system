@@ -41,8 +41,8 @@
                             <div class="col-md-6 mb-3">
                                 <label for="price" class="form-label">Price ($) *</label>
                                 <input type="number" class="form-control" id="price" name="price" 
-                                       step="0.01" min="0" value="{{ "%.2f"|format(item.price) if item else '' }}" required>
-                                <div class="form-text">Price in USD</div>
+                                       step="0.01" min="0.01" max="1.50" value="{{ "%.2f"|format(item.price) if item else '' }}" required>
+                                <div class="form-text">Price in USD. Maximum $1.50 per item; water $0.30.</div>
                             </div>
 
                             <div class="col-md-6 mb-3">

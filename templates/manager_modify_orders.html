@@ -6,7 +6,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1"><i class="fas fa-list-check text-info me-2"></i>Manage Orders</h2>
-            <p class="text-muted mb-0">Find orders, update their status, or replace unavailable items</p>
+            <p class="text-muted mb-0">Find orders, edit meals and quantities, or extend a ticket</p>
         </div>
         <a href="{{ url_for('manager_dashboard') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
@@ -146,51 +146,44 @@
                                 </table>
                             </div>
 
-                            <!-- Modification Section -->
-                            {% set availability = namespace(has_unavailable=false) %}
-                            {% for item in order.items %}
-                                {% if not item.menu_item or not item.menu_item.is_available %}
-                                    {% set availability.has_unavailable = true %}
-                                {% endif %}
-                            {% endfor %}
-
-                            {% if availability.has_unavailable %}
-                                <div class="alert alert-warning" role="alert">
-                                    <i class="fas fa-exclamation-circle me-2"></i>
-                                    <strong>Action Required:</strong> Some items in this order are unavailable. Please select replacements.
-                                </div>
-
+                            {% if not order.collected_at and order.status not in ('completed', 'cancelled') %}
                                 <form method="POST" action="{{ url_for('modify_order_items', order_id=order.id) }}" class="mb-3">
-                                    <div class="border rounded p-3 bg-light">
-                                        {% for item in order.items %}
-                                            {% if not item.menu_item or not item.menu_item.is_available %}
-                                                <div class="mb-3">
-                                                    <label class="form-label">
-                                                        <strong>Replace Unavailable Item:</strong><br>
-                                                        <small class="text-muted">Originally: {{ item.menu_item.name if item.menu_item else 'Unknown Item' }} (Qty: {{ item.quantity }})</small>
-                                                    </label>
-                                                    <select class="form-select" name="modifications[{{ item.id }}]" required>
-                                                        <option value="">-- Select Alternative Item --</option>
-                                                        {% for available_item in available_items %}
-                                                            <option value="{{ available_item.id }}">
-                                                                {{ available_item.name }} (${{ "%.2f"|format(available_item.price * item.quantity) }} for {{ item.quantity }}x)
-                                                            </option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </div>
-
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-save me-2"></i>Save Modifications
-                                        </button>
-                                    </div>
+                                    <input type="hidden" name="manager_order_csrf" value="{{ manager_order_csrf }}">
+                                    <h6 class="fw-bold">Edit meals and quantities</h6>
+                                    {% for item in order.items %}
+                                        <div class="row g-2 align-items-end mb-2">
+                                            <div class="col-8">
+                                                <label class="form-label" for="meal-{{ item.id }}">Meal {{ loop.index }}</label>
+                                                <select class="form-select" id="meal-{{ item.id }}" name="meal_{{ item.id }}" required>
+                                                    {% for available_item in available_items %}
+                                                        <option value="{{ available_item.id }}" {% if item.menu_item_id == available_item.id %}selected{% endif %}>{{ available_item.name }} (${{ "%.2f"|format(available_item.price) }})</option>
+                                                    {% endfor %}
+                                                    {% if item.menu_item and not item.menu_item.is_available %}
+                                                        <option value="{{ item.menu_item.id }}" selected>{{ item.menu_item.name }} (unavailable)</option>
+                                                    {% endif %}
+                                                </select>
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label" for="quantity-{{ item.id }}">Quantity</label>
+                                                <input class="form-control" type="number" id="quantity-{{ item.id }}" name="quantity_{{ item.id }}" min="1" max="10" value="{{ item.quantity }}" required>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                    <button type="submit" class="btn btn-primary mt-2"><i class="fas fa-save me-2"></i>Save meals and quantities</button>
                                 </form>
-                            {% else %}
-                                <div class="alert alert-success" role="alert">
-                                    <i class="fas fa-check-circle me-2"></i>All items are available.
+                            {% endif %}
+
+                            {% if order.paid_at and order.ticket_code %}
+                                <div class="border-top pt-3 mb-3">
+                                    <p class="mb-2">Ticket expires: <strong>{{ ticket_expiry(order).strftime('%d %b %Y at %H:%M') }} (Zimbabwe time)</strong></p>
+                                    {% if can_extend_ticket(order) %}
+                                        <form method="POST" action="{{ url_for('extend_ticket', order_id=order.id) }}">
+                                            <input type="hidden" name="manager_order_csrf" value="{{ manager_order_csrf }}">
+                                            <button type="submit" class="btn btn-outline-success">Extend ticket by one day</button>
+                                        </form>
+                                    {% elif order.ticket_extension_days %}
+                                        <small class="text-success">One-day extension applied</small>
+                                    {% endif %}
                                 </div>
                             {% endif %}
 
@@ -223,43 +216,4 @@
 
 </div>
 
-<script>
-    // Parse JSON modifications on form submission
-    document.querySelectorAll('form[action*="/modify-items"]').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            const modifications = {};
-            const selects = this.querySelectorAll('select[name*="modifications"]');
-            let valid = true;
-
-            selects.forEach(select => {
-                const match = select.name.match(/modifications\[(\d+)\]/);
-                if (match) {
-                    const itemId = match[1];
-                    const selectedValue = select.value;
-                    
-                    if (!selectedValue) {
-                        valid = false;
-                        select.classList.add('is-invalid');
-                    } else {
-                        modifications[itemId] = selectedValue;
-                        select.classList.remove('is-invalid');
-                    }
-                }
-            });
-
-            if (!valid) {
-                e.preventDefault();
-                alert('Please select an alternative item for all unavailable items.');
-                return false;
-            }
-
-            // Create a hidden input with JSON data
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'modifications';
-            hiddenInput.value = JSON.stringify(modifications);
-            this.appendChild(hiddenInput);
-        });
-    });
-</script>
 {% endblock %}

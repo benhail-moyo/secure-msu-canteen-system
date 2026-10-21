@@ -137,6 +137,12 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
     order_number = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    ticket_code = db.Column(db.String(32), unique=True, index=True)
+    ticket_extension_days = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    payment_method = db.Column(db.String(30))
+    paid_at = db.Column(db.DateTime)
+    collected_at = db.Column(db.DateTime)
+    collected_by_id = db.Column(db.Integer, db.ForeignKey("students.id"))
 
     student_id = db.Column(
         db.Integer,
@@ -160,7 +166,7 @@ class Order(db.Model):
 
     estimated_ready_time = db.Column(db.DateTime)
 
-    student = db.relationship("Student", backref="orders")
+    student = db.relationship("Student", foreign_keys=[student_id], backref="orders")
 
     items = db.relationship(
         "OrderItem",
@@ -180,9 +186,7 @@ class Order(db.Model):
             "status": self.status,
             "total_amount": self.total_amount,
             "items": [item.to_dict() for item in self.items],
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "estimated_ready_time": self.estimated_ready_time.isoformat()
-            if self.estimated_ready_time else None
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
 

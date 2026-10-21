@@ -12,6 +12,7 @@ class Config:
     )
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    TICKET_RSA_PRIVATE_KEY_PEM = os.environ.get("TICKET_RSA_PRIVATE_KEY_PEM")
 
     ITEMS_PER_PAGE = 12
     MAX_ORDER_ITEMS = 20
@@ -38,6 +39,7 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+    TICKET_REQUIRE_CONFIGURED_KEY = True
 
 
 class TestingConfig(Config):
