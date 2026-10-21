@@ -11,7 +11,7 @@ import secrets
 import string
 
 from config import config
-from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback, Alert
+from models import db, Student, Category, MenuItem, Order, OrderItem, Feedback, Alert, PasswordResetToken
 from tickets import load_private_key, issue_ticket, verify_ticket_payload, expiry_for
 
 mail = Mail()
@@ -484,6 +484,147 @@ def register_routes(app):
             flash("Invalid email/student ID or password.", "danger")
 
         return render_template("login.html")
+
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        if request.method == "POST":
+            student_id = request.form.get("student_id", "").strip()
+            email = request.form.get("email", "").strip().lower()
+            phone = request.form.get("phone", "").strip()
+            if not student_id or not email or not phone:
+                flash("Please complete all account verification fields.", "danger")
+                return render_template("forgot_password.html")
+
+            student = Student.query.filter_by(
+                student_id=student_id,
+                email=email,
+                phone=phone
+            ).first()
+            if not student:
+                flash("Those details don't match an account. Check them and try again.", "danger")
+                return render_template("forgot_password.html")
+
+            token = secrets.token_urlsafe(32)
+            otp_code = f"{secrets.randbelow(1_000_000):06d}"
+            PasswordResetToken.query.filter_by(student_id=student.id).delete()
+            reset_request = PasswordResetToken(
+                student_id=student.id,
+                token=token,
+                otp_code=otp_code,
+                expires_at=datetime.utcnow() + timedelta(hours=1),
+                otp_verified=False
+            )
+            db.session.add(reset_request)
+            db.session.commit()
+
+            if not send_2fa_email(student.email, otp_code, "reset your password"):
+                db.session.delete(reset_request)
+                db.session.commit()
+                flash("Unable to send a verification email right now. Please try again later.", "danger")
+                return render_template("forgot_password.html")
+
+            session["password_reset_token"] = token
+            return redirect(url_for("verify_otp_password_reset"))
+
+        return render_template("forgot_password.html")
+
+    @app.route("/verify-otp-password-reset", methods=["GET", "POST"])
+    def verify_otp_password_reset():
+        token = session.get("password_reset_token")
+        reset_request = PasswordResetToken.query.filter_by(token=token).first() if token else None
+        if not reset_request or reset_request.used_at or reset_request.is_expired():
+            session.pop("password_reset_token", None)
+            flash("Your password reset verification has expired. Please start again.", "warning")
+            return redirect(url_for("forgot_password"))
+
+        if request.method == "POST":
+            entered_otp = request.form.get("otp", "").strip()
+            if not entered_otp:
+                flash("Please enter the verification code.", "danger")
+                return render_template("verify_otp_password_reset.html")
+            if not secrets.compare_digest(entered_otp, reset_request.otp_code or ""):
+                flash("That verification code is incorrect. Please try again.", "danger")
+                return render_template("verify_otp_password_reset.html")
+
+            reset_request.otp_verified = True
+            db.session.commit()
+            flash("Your email has been verified. You can now choose a new password.", "success")
+            return redirect(url_for("reset_password", token=reset_request.token))
+
+        return render_template("verify_otp_password_reset.html")
+
+    @app.route("/reset-password/<token>", methods=["GET", "POST"])
+    def reset_password(token):
+        if current_user.is_authenticated:
+            return redirect_user_by_role(current_user)
+
+        reset_request = PasswordResetToken.query.filter_by(token=token).first()
+        if not reset_request:
+            flash("That password reset link is invalid or has already been used.", "danger")
+            return redirect(url_for("login"))
+
+        if reset_request.used_at or reset_request.is_expired():
+            flash("That password reset link has expired or is no longer valid.", "warning")
+            return redirect(url_for("login"))
+
+        if reset_request.otp_code and (
+            not reset_request.otp_verified
+            or session.get("password_reset_token") != reset_request.token
+        ):
+            flash("Please verify the email code before resetting your password.", "warning")
+            return redirect(url_for("verify_otp_password_reset"))
+
+        student = Student.query.get(reset_request.student_id)
+        if not student:
+            flash("The account associated with this reset link could not be found.", "danger")
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            password = request.form.get("password")
+            confirm_password = request.form.get("confirm_password")
+
+            if not password or not confirm_password:
+                flash("Please complete both password fields.", "danger")
+                return render_template("reset_password.html", token=token, student=student)
+
+            if password != confirm_password:
+                flash("Passwords do not match.", "danger")
+                return render_template("reset_password.html", token=token, student=student)
+
+            strength, password_feedback = evaluate_password_strength(
+                password,
+                student_id=student.student_id,
+                name=student.name,
+                email=student.email
+            )
+            if strength == "Weak":
+                flash(
+                    "Password strength: Weak. Improve it by choosing a less predictable password: "
+                    + "; ".join(password_feedback)
+                    + ".",
+                    "danger"
+                )
+                return render_template("reset_password.html", token=token, student=student)
+            if password_feedback:
+                flash(
+                    "Password strength: Medium. You can make it stronger if you "
+                    + "; ".join(password_feedback)
+                    + ".",
+                    "warning"
+                )
+
+            student.password_hash = generate_password_hash(password)
+            reset_request.used_at = datetime.utcnow()
+            db.session.commit()
+            session.pop("password_reset_token", None)
+
+            flash("Your password has been reset successfully. Please login with your new password.", "success")
+            return redirect(url_for("login"))
+
+        return render_template("reset_password.html", token=token, student=student)
 
     @app.route("/admin/login", methods=["GET", "POST"])
     def admin_login():
