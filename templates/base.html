@@ -128,12 +128,18 @@
                     </li>
 
                     <li class="nav-item">
-                        <a class="btn btn-light btn-sm ms-lg-2 mt-2 mt-lg-0 text-success fw-bold" href="{{ url_for('register') }}">
+                        <a class="btn register-btn btn-sm ms-lg-2 mt-2 mt-lg-0 fw-bold" href="{{ url_for('register') }}">
                             Register
                         </a>
                     </li>
 
                 {% endif %}
+
+                <li class="nav-item">
+                    <button class="nav-link theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode" aria-pressed="false">
+                        <i class="fas fa-moon" aria-hidden="true"></i>
+                    </button>
+                </li>
 
             </ul>
         </div>
@@ -197,6 +203,148 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function() {
+        const storedTheme = localStorage.getItem('msu-theme');
+        const savedTheme = storedTheme === 'dark' ? 'dark' : 'light';
+        document.body.setAttribute('data-theme', savedTheme);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggle = document.getElementById('themeToggle');
+            const themeIcon = toggle ? toggle.querySelector('i') : null;
+
+            function syncTheme(theme) {
+                document.body.setAttribute('data-theme', theme);
+                if (toggle) {
+                    toggle.setAttribute('aria-pressed', String(theme === 'dark'));
+                    if (theme === 'dark') {
+                        if (themeIcon) themeIcon.className = 'fas fa-sun';
+                        toggle.setAttribute('aria-label', 'Switch to light mode');
+                        toggle.setAttribute('title', 'Switch to light mode');
+                    } else {
+                        if (themeIcon) themeIcon.className = 'fas fa-moon';
+                        toggle.setAttribute('aria-label', 'Switch to dark mode');
+                        toggle.setAttribute('title', 'Switch to dark mode');
+                    }
+                }
+            }
+
+            syncTheme(savedTheme);
+
+            if (toggle) {
+                toggle.addEventListener('click', function() {
+                    const currentTheme = document.body.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+                    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                    localStorage.setItem('msu-theme', nextTheme);
+                    syncTheme(nextTheme);
+                });
+            }
+        });
+    })();
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-password-strength]').forEach(function(form) {
+            const password = form.querySelector('[name="password"]');
+            const label = form.querySelector('[data-strength-label]');
+            const meter = form.querySelector('[data-strength-meter]');
+            const progress = form.querySelector('[role="progressbar"]');
+            const warning = form.querySelector('[data-password-warning]');
+            const ruleElements = form.querySelectorAll('[data-password-rule]');
+            const personalFields = [];
+            const commonPasswords = [
+                'password', 'password1', '123456', '12345678',
+                'qwerty', 'admin', 'letmein', 'welcome'
+            ];
+            let personalValues = [];
+
+            try {
+                personalValues = JSON.parse(form.dataset.personalValues || '[]');
+            } catch (error) {
+                console.error('Could not read password strength context.', error);
+            }
+
+            function updateStrength() {
+                const value = password.value;
+                const normalized = value.toLowerCase();
+                const rules = {
+                    length: Array.from(value).length >= 8,
+                    lower: /\p{Lowercase}/u.test(value),
+                    upper: /\p{Uppercase}/u.test(value),
+                    number: /\p{N}/u.test(value),
+                    special: /[^\p{L}\p{N}]/u.test(value)
+                };
+                let score = Array.from(value).length >= 12 ? 2 : Array.from(value).length >= 8 ? 1 : 0;
+
+                Object.entries(rules).forEach(function(entry) {
+                    if (entry[0] !== 'length' && entry[1]) {
+                        score += 1;
+                    }
+                });
+
+                const personalMatch = personalValues.concat(personalFields.map(function(field) {
+                    return field.value;
+                })).some(function(item) {
+                    let candidate = String(item || '').trim().toLowerCase();
+                    if (candidate.includes('@')) {
+                        candidate = candidate.split('@')[0];
+                    }
+                    return candidate.length >= 3 && normalized.includes(candidate);
+                });
+                if (personalMatch) {
+                    score -= 1;
+                }
+
+                const commonMatch = commonPasswords.includes(normalized);
+                if (commonMatch) {
+                    score = 0;
+                }
+
+                const strength = score >= 6 ? 'Strong' : score >= 4 ? 'Medium' : 'Weak';
+                const percent = strength === 'Strong' ? 100 : strength === 'Medium' ? 66 : value ? 33 : 0;
+
+                ruleElements.forEach(function(element) {
+                    const passed = rules[element.dataset.passwordRule];
+                    const icon = element.querySelector('i');
+                    element.classList.toggle('text-success', passed);
+                    element.classList.toggle('text-muted', !passed);
+                    if (icon) {
+                        icon.className = passed
+                            ? 'fas fa-circle-check me-1'
+                            : 'fas fa-circle-xmark me-1';
+                    }
+                });
+
+                label.textContent = value ? strength : 'Enter a password';
+                label.className = value
+                    ? 'text-' + (strength === 'Strong' ? 'success' : strength === 'Medium' ? 'warning' : 'danger')
+                    : '';
+                meter.style.width = percent + '%';
+                meter.className = 'progress-bar bg-' + (strength === 'Strong' ? 'success' : strength === 'Medium' ? 'warning' : 'danger');
+                progress.setAttribute('aria-valuenow', String(percent));
+                progress.setAttribute('aria-valuetext', value ? strength : 'No password entered');
+                warning.textContent = commonMatch
+                    ? 'Avoid using a common password.'
+                    : personalMatch
+                        ? 'Avoid using your name, student ID, or email in the password.'
+                        : '';
+                warning.classList.toggle('d-none', !commonMatch && !personalMatch);
+            }
+
+            if (password && label && meter && progress && warning) {
+                ['student_id', 'name', 'email'].forEach(function(name) {
+                    const field = form.querySelector('[name="' + name + '"]');
+                    if (field) {
+                        personalFields.push(field);
+                        field.addEventListener('input', updateStrength);
+                    }
+                });
+                password.addEventListener('input', updateStrength);
+                updateStrength();
+            }
+        });
+    });
+</script>
 
 {% block extra_js %}{% endblock %}
 </body>

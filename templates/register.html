@@ -7,26 +7,43 @@
             <div class="card border-0 shadow">
                 <div class="card-body p-5">
                     <h2 class="text-center mb-4"><i class="fas fa-user-plus text-primary me-2"></i>Register</h2>
-                    <form method="POST">
+                    <form method="POST" data-password-strength>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="student_id" class="form-label">Student ID</label>
-                                <input type="text" class="form-control" id="student_id" name="student_id" required>
+                                <input type="text" class="form-control" id="student_id" name="student_id" value="{{ request.form.get('student_id', '') }}" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="name" class="form-label">Full Name</label>
-                                <input type="text" class="form-control" id="name" name="name" required>
+                                <input type="text" class="form-control" id="name" name="name" value="{{ request.form.get('name', '') }}" required>
                             </div>
                         </div>
                         <div class="mb-3">
                             <label for="email" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="email" name="email" required>
+                            <input type="email" class="form-control" id="email" name="email" value="{{ request.form.get('email', '') }}" required>
                             <small class="text-muted">Use your MSU email (e.g., student@msu.ac.zw)</small>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="password" class="form-label">Password</label>
                                 <input type="password" class="form-control" id="password" name="password" required minlength="6">
+                                <div class="password-strength mt-2" aria-live="polite" aria-atomic="true">
+                                    <div class="d-flex justify-content-between small mb-1">
+                                        <span>Password strength</span>
+                                        <span data-strength-label>Enter a password</span>
+                                    </div>
+                                    <div class="progress" role="progressbar" aria-label="Password strength" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                        <div class="progress-bar" data-strength-meter style="width: 0%"></div>
+                                    </div>
+                                    <ul class="password-requirements list-unstyled small mt-2 mb-0">
+                                        <li data-password-rule="length"><i class="fas fa-circle-xmark me-1" aria-hidden="true"></i>At least 8 characters</li>
+                                        <li data-password-rule="lower"><i class="fas fa-circle-xmark me-1" aria-hidden="true"></i>A lowercase letter</li>
+                                        <li data-password-rule="upper"><i class="fas fa-circle-xmark me-1" aria-hidden="true"></i>An uppercase letter</li>
+                                        <li data-password-rule="number"><i class="fas fa-circle-xmark me-1" aria-hidden="true"></i>A number</li>
+                                        <li data-password-rule="special"><i class="fas fa-circle-xmark me-1" aria-hidden="true"></i>A special character</li>
+                                    </ul>
+                                    <p class="small text-danger mt-2 mb-0 d-none" data-password-warning></p>
+                                </div>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="confirm_password" class="form-label">Confirm Password</label>
@@ -36,11 +53,11 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="department" class="form-label">Department</label>
-                                <input type="text" class="form-control" id="department" name="department">
+                                <input type="text" class="form-control" id="department" name="department" value="{{ request.form.get('department', '') }}">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="phone" class="form-label">Phone Number</label>
-                                <input type="tel" class="form-control" id="phone" name="phone">
+                                <input type="tel" class="form-control" id="phone" name="phone" value="{{ request.form.get('phone', '') }}">
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary w-100"><i class="fas fa-user-plus me-2"></i>Register</button>
