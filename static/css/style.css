@@ -49,6 +49,22 @@ body {
     color: var(--nav-link-color) !important;
 }
 
+.theme-toggle {
+    position: fixed;
+    top: 0.5rem;
+    right: 0.75rem;
+    z-index: 1031;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus {
+    background: transparent;
+}
+
 body[data-theme="dark"] .navbar {
     background-color: var(--nav-bg) !important;
 }
@@ -229,6 +245,22 @@ body[data-theme="dark"] .input-group-text {
     border-color: var(--card-border);
 }
 
+body[data-theme="dark"] .password-strength .progress {
+    background-color: var(--panel-muted);
+}
+
+body[data-theme="dark"] .password-strength .text-success {
+    color: #75d39a !important;
+}
+
+body[data-theme="dark"] .password-strength .text-warning {
+    color: #ffda70 !important;
+}
+
+body[data-theme="dark"] .password-strength .text-danger {
+    color: #ff99a6 !important;
+}
+
 body[data-theme="dark"] .text-muted,
 body[data-theme="dark"] .small,
 body[data-theme="dark"] label,
@@ -287,15 +319,6 @@ body[data-theme="dark"] .alert-secondary {
 
 body[data-theme="dark"] .footer {
     background-color: #0e1931;
-}
-
-body[data-theme="dark"] .theme-toggle {
-    border-color: rgba(255,255,255,0.55);
-}
-
-body[data-theme="dark"] .theme-toggle:hover {
-    background-color: #ffc107;
-    color: #04151e;
 }
 
 .order-status {

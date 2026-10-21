@@ -238,9 +238,13 @@ class PasswordResetToken(db.Model):
 
     token = db.Column(db.String(128), unique=True, nullable=False, index=True)
 
+    otp_code = db.Column(db.String(6), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     expires_at = db.Column(db.DateTime, nullable=False)
+
+    otp_verified = db.Column(db.Boolean, default=False)
 
     used_at = db.Column(db.DateTime)
 

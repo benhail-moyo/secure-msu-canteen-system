@@ -470,29 +470,53 @@ def register_routes(app):
             return redirect_user_by_role(current_user)
 
         if request.method == "POST":
+            student_id = request.form.get("student_id", "").strip()
             email = request.form.get("email", "").strip().lower()
-            if not email:
-                flash("Please enter your email address.", "danger")
+            phone = request.form.get("phone", "").strip()
+
+            if not student_id or not email or not phone:
+                flash("Please fill in all required fields.", "danger")
                 return render_template("forgot_password.html")
 
-            student = Student.query.filter_by(email=email).first()
+            # Find student with matching credentials
+            student = Student.query.filter_by(
+                student_id=student_id,
+                email=email,
+                phone=phone
+            ).first()
+
             if student:
+                # Generate OTP and token
+                otp_code = ''.join(random.choices(string.digits, k=6))
                 token = secrets.token_urlsafe(32)
                 expires_at = datetime.utcnow() + timedelta(hours=1)
 
+                # Delete any existing reset tokens for this student
                 PasswordResetToken.query.filter_by(student_id=student.id).delete()
-                db.session.add(PasswordResetToken(
+
+                # Create new password reset token with OTP
+                reset_token = PasswordResetToken(
                     student_id=student.id,
                     token=token,
-                    expires_at=expires_at
-                ))
+                    otp_code=otp_code,
+                    expires_at=expires_at,
+                    otp_verified=False
+                )
+                db.session.add(reset_token)
                 db.session.commit()
 
-                reset_url = url_for("reset_password", token=token, _external=True)
-                send_password_reset_email(student.email, reset_url)
+                # Send OTP via email (or print to console if email fails)
+                print(f"\n[PASSWORD RESET OTP DEBUG] Student: {student.email}")
+                print(f"[PASSWORD RESET OTP DEBUG] OTP Code: {otp_code}")
+                print(f"[PASSWORD RESET OTP DEBUG] Use this code to reset the password\n")
 
-            flash("If that account exists, a password reset email has been sent.", "info")
-            return redirect(url_for("login"))
+                send_2fa_email(student.email, otp_code, "reset your password")
+
+                flash("OTP sent to your email. Please enter it on the next page.", "success")
+                return redirect(url_for("reset_password", token=token))
+
+            flash("Your credentials don't match our records. Please check your details and try again.", "danger")
+            return render_template("forgot_password.html")
 
         return render_template("forgot_password.html")
 
@@ -506,8 +530,12 @@ def register_routes(app):
             flash("That password reset link is invalid or has already been used.", "danger")
             return redirect(url_for("login"))
 
-        if reset_request.used_at or reset_request.is_expired():
+        if reset_request.is_expired():
             flash("That password reset link has expired or is no longer valid.", "warning")
+            return redirect(url_for("login"))
+
+        if reset_request.used_at:
+            flash("That password reset link has already been used.", "warning")
             return redirect(url_for("login"))
 
         student = Student.query.get(reset_request.student_id)
@@ -516,16 +544,27 @@ def register_routes(app):
             return redirect(url_for("login"))
 
         if request.method == "POST":
+            entered_otp = request.form.get("otp", "").strip()
             password = request.form.get("password")
             confirm_password = request.form.get("confirm_password")
 
+            # Validate OTP first
+            if not entered_otp:
+                flash("Please enter the OTP code.", "danger")
+                return render_template("reset_password.html", token=token, student=student)
+
+            if entered_otp != reset_request.otp_code:
+                flash("Invalid OTP code. Please try again.", "danger")
+                return render_template("reset_password.html", token=token, student=student)
+
+            # OTP is valid, now validate passwords
             if not password or not confirm_password:
                 flash("Please complete both password fields.", "danger")
-                return render_template("reset_password.html", token=token)
+                return render_template("reset_password.html", token=token, student=student)
 
             if password != confirm_password:
                 flash("Passwords do not match.", "danger")
-                return render_template("reset_password.html", token=token)
+                return render_template("reset_password.html", token=token, student=student)
 
             strength, password_feedback = evaluate_password_strength(
                 password,
@@ -540,7 +579,7 @@ def register_routes(app):
                     + ".",
                     "danger"
                 )
-                return render_template("reset_password.html", token=token)
+                return render_template("reset_password.html", token=token, student=student)
             if password_feedback:
                 flash(
                     "Password strength: Medium. You can make it stronger if you "
@@ -549,6 +588,7 @@ def register_routes(app):
                     "warning"
                 )
 
+            # All validations passed, update password
             student.password_hash = generate_password_hash(password)
             reset_request.used_at = datetime.utcnow()
             db.session.commit()
@@ -556,7 +596,7 @@ def register_routes(app):
             flash("Your password has been reset successfully. Please login with your new password.", "success")
             return redirect(url_for("login"))
 
-        return render_template("reset_password.html", token=token)
+        return render_template("reset_password.html", token=token, student=student)
 
     @app.route("/admin/login", methods=["GET", "POST"])
     def admin_login():
