@@ -282,7 +282,17 @@ def register_routes(app):
     def index():
         if current_user.is_authenticated:
             return redirect_user_by_role(current_user)
-        return redirect(url_for("login"))
+        categories = Category.query.filter_by(
+            is_active=True
+        ).order_by(Category.display_order).all()
+        featured_items = MenuItem.query.filter_by(
+            is_available=True
+        ).order_by(MenuItem.id).limit(3).all()
+        return render_template(
+            "index.html",
+            categories=categories,
+            featured_items=featured_items
+        )
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
@@ -1178,19 +1188,16 @@ def register_routes(app):
     @app.route("/menu")
     def menu():
         category_id = request.args.get("category")
-        search_query = request.args.get("q")
+        search_query = request.args.get("q", "").strip()
+        items_query = MenuItem.query.filter_by(is_available=True)
 
         if category_id:
-            items = MenuItem.query.filter_by(
-                category_id=category_id, is_available=True
-            ).all()
-        elif search_query:
-            items = MenuItem.query.filter(
-                MenuItem.is_available == True,
+            items_query = items_query.filter_by(category_id=category_id)
+        if search_query:
+            items_query = items_query.filter(
                 MenuItem.name.ilike(f"%{search_query}%")
-            ).all()
-        else:
-            items = MenuItem.query.filter_by(is_available=True).all()
+            )
+        items = items_query.all()
 
         categories = Category.query.filter_by(
             is_active=True
@@ -1200,7 +1207,8 @@ def register_routes(app):
             "menu.html",
             items=items,
             categories=categories,
-            selected_category=category_id
+            selected_category=category_id,
+            search_query=search_query
         )
 
     @app.route("/menu/<int:item_id>")

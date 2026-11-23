@@ -26,15 +26,13 @@
 <section class="py-5 bg-light">
     <div class="container">
         <h2 class="text-center mb-4">Our Menu Categories</h2>
-        <div class="row g-4">
+        <div class="home-category-strip">
             {% for category in categories %}
-            <div class="col-6 col-md-4 col-lg-2">
-                <a href="{{ url_for('menu', category=category.id) }}" class="text-decoration-none">
-                    <div class="card h-100 border-0 shadow-sm category-card">
-                        <div class="card-body text-center"><i class="fas fa-{{ category.icon }} fa-2x text-primary"></i><h6 class="mt-2">{{ category.name }}</h6></div>
-                    </div>
-                </a>
-            </div>
+            <a href="{{ url_for('menu', category=category.id) }}" class="home-category-link text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm category-card">
+                    <div class="card-body text-center"><i class="fas fa-{{ category.icon }} fa-2x text-primary"></i><h6 class="mt-2">{{ category.name }}</h6></div>
+                </div>
+            </a>
             {% endfor %}
         </div>
     </div>

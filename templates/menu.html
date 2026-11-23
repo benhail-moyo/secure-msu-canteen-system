@@ -3,21 +3,23 @@
 {% block content %}
 <div class="container py-5">
     <h1 class="mb-4">Our Menu</h1>
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <form action="{{ url_for('menu') }}" method="get" class="d-flex">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i></button>
-            </form>
+    <form action="{{ url_for('menu') }}" method="get" class="menu-search mb-3" role="search">
+        <label class="visually-hidden" for="menu-search">Search menu items</label>
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search" aria-hidden="true"></i></span>
+            <input id="menu-search" type="search" class="form-control" name="q" value="{{ search_query }}"
+                   placeholder="Search meals by name">
+            <button type="submit" class="btn btn-primary">Search</button>
         </div>
-        <div class="col-md-6">
-            <div class="btn-group" role="group">
-                <a href="{{ url_for('menu') }}" class="btn btn-outline-primary {% if not selected_category %}active{% endif %}">All</a>
-                {% for category in categories %}
-                <a href="{{ url_for('menu', category=category.id) }}" class="btn btn-outline-primary {% if selected_category == category.id|string %}active{% endif %}">{{ category.name }}</a>
-                {% endfor %}
-            </div>
+    </form>
+    <nav class="menu-category-scroll mb-4" aria-label="Menu categories">
+        <div class="btn-group menu-category-group" role="group" aria-label="Filter meals by category">
+            <a href="{{ url_for('menu', q=search_query or None) }}" class="btn btn-outline-primary {% if not selected_category %}active{% endif %}" {% if not selected_category %}aria-current="page"{% endif %}>All</a>
+            {% for category in categories %}
+            <a href="{{ url_for('menu', category=category.id, q=search_query or None) }}" class="btn btn-outline-primary {% if selected_category == category.id|string %}active{% endif %}" {% if selected_category == category.id|string %}aria-current="page"{% endif %}>{{ category.name }}</a>
+            {% endfor %}
         </div>
-    </div>
+    </nav>
     {% set pictured_meals = [
         'chicken-stew', 'beef-sadza', 'rice-and-stew', 'sadza-and-beans',
         'sadza-and-vegetables', 'rice-and-chicken', 'maputi', 'fried-chips',
