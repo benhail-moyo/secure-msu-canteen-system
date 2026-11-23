@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Serve Orders - MSU Canteen{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:760px">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Serve Orders</h2><a href="{{ url_for('staff_dashboard') }}" class="btn btn-outline-secondary">Dashboard</a>
+  </div>
+  <div class="btn-group mb-3" role="group" aria-label="Ticket entry method">
+    <button id="scan-tab" type="button" class="btn btn-success">Scan ticket</button>
+    <button id="code-tab" type="button" class="btn btn-outline-success">Code</button>
+  </div>
+  <div id="scan-panel" class="card p-3 mb-3">
+    <p class="mb-2">Point the camera at the student's QR code or barcode.</p>
+    <div id="reader" style="max-width:520px"></div>
+    <p id="camera-help" class="text-muted small mt-2 mb-0">Camera access requires HTTPS or localhost.</p>
+  </div>
+  <form id="code-panel" class="card p-3 mb-3" hidden>
+    <label class="form-label" for="registration">Student registration number</label>
+    <input id="registration" class="form-control mb-3" required autocomplete="off">
+    <label class="form-label" for="ticket-code">Ticket code</label>
+    <input id="ticket-code" class="form-control mb-3" required autocomplete="off">
+    <button class="btn btn-success" type="submit">Check ticket</button>
+  </form>
+  <div id="details" class="card border-success p-3" hidden>
+    <h4 class="text-success">Valid ticket</h4>
+    <p id="student-details" class="mb-2"></p>
+    <h5>Meal details</h5><ul id="meal-list" class="list-group mb-3"></ul>
+    <div class="d-flex gap-2"><button id="approve" class="btn btn-success" type="button">Approve</button><button id="cancel" class="btn btn-outline-secondary" type="button">Cancel</button></div>
+  </div>
+</div>
+<div class="toast-container position-fixed bottom-0 end-0 p-3"><div id="ticket-toast" class="toast text-white border-0" role="status" aria-live="polite"><div class="d-flex"><div class="toast-body" id="toast-text"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div></div></div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const csrf = {{ serve_csrf|tojson }};
+const scanTab = document.getElementById('scan-tab'), codeTab = document.getElementById('code-tab');
+const scanPanel = document.getElementById('scan-panel'), codePanel = document.getElementById('code-panel');
+const details = document.getElementById('details'), approve = document.getElementById('approve');
+const toastEl = document.getElementById('ticket-toast');
+let scanner = null, pending = null, busy = false, mode = 'scan';
+function toast(message, success) {
+  document.getElementById('toast-text').textContent = message;
+  toastEl.classList.toggle('bg-success', success); toastEl.classList.toggle('bg-danger', !success);
+  bootstrap.Toast.getOrCreateInstance(toastEl, {delay: 3500}).show();
+}
+async function post(url, body) {
+  const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-Serve-CSRF':csrf}, body:JSON.stringify(body)});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Request failed.');
+  return data;
+}
+async function startCamera() {
+  if (mode !== 'scan' || pending || scanner) return;
+  if (!window.Html5Qrcode) { document.getElementById('camera-help').textContent = 'Scanner could not load. Use Code entry.'; return; }
+  try {
+    scanner = new Html5Qrcode('reader');
+    await scanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:250,height:180}}, code => verify(code, '', 'scan'));
+    document.getElementById('camera-help').textContent = 'Camera ready. Scan a QR code or barcode.';
+  } catch (error) {
+    scanner = null;
+    document.getElementById('camera-help').textContent = 'Camera unavailable. Allow camera access or use Code entry.';
+  }
+}
+async function stopCamera() {
+  if (!scanner) return;
+  const current = scanner; scanner = null;
+  try { await current.stop(); current.clear(); } catch (_) {}
+}
+async function verify(code, registration, entryMode) {
+  if (busy || pending) return;
+  busy = true;
+  try {
+    const data = await post({{ url_for('verify_ticket')|tojson }}, {code, registration, mode:entryMode});
+    pending = {code:data.code, registration:data.registration};
+    await stopCamera();
+    document.getElementById('student-details').textContent = 'Registration: ' + data.registration;
+    const list = document.getElementById('meal-list'); list.replaceChildren();
+    data.items.forEach(item => { const li = document.createElement('li'); li.className = 'list-group-item'; li.textContent = item.name + ' × ' + item.quantity; list.appendChild(li); });
+    details.hidden = false;
+    toast('Ticket valid. Review the meal and approve.', true);
+  } catch (error) { toast(error.message, false); }
+  finally { busy = false; }
+}
+async function reset() {
+  pending = null; details.hidden = true; approve.disabled = false;
+  if (mode === 'scan') await startCamera();
+  else { document.getElementById('code-panel').reset(); document.getElementById('registration').focus(); }
+}
+approve.addEventListener('click', async () => {
+  if (!pending || busy) return;
+  busy = true; approve.disabled = true;
+  try { const data = await post({{ url_for('approve_ticket')|tojson }}, pending); toast(data.message, true); await reset(); }
+  catch (error) { toast(error.message, false); await reset(); }
+  finally { busy = false; }
+});
+document.getElementById('cancel').addEventListener('click', reset);
+codePanel.addEventListener('submit', event => {event.preventDefault(); verify(document.getElementById('ticket-code').value, document.getElementById('registration').value, 'manual');});
+scanTab.addEventListener('click', async () => { mode='scan'; scanPanel.hidden=false; codePanel.hidden=true; scanTab.className='btn btn-success'; codeTab.className='btn btn-outline-success'; await reset(); });
+codeTab.addEventListener('click', async () => { mode='manual'; await stopCamera(); scanPanel.hidden=true; codePanel.hidden=false; codeTab.className='btn btn-success'; scanTab.className='btn btn-outline-success'; await reset(); });
+window.addEventListener('pagehide', stopCamera);
+startCamera();
+</script>
+{% endblock %}

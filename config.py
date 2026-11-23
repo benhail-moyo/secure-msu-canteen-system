@@ -12,6 +12,7 @@ class Config:
     )
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    TICKET_RSA_PRIVATE_KEY_PEM = os.environ.get("TICKET_RSA_PRIVATE_KEY_PEM")
 
     ITEMS_PER_PAGE = 12
     MAX_ORDER_ITEMS = 20
@@ -28,7 +29,7 @@ class Config:
     MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "False").lower() == "true"   # port 465 = SSL
     MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "True").lower() == "true"  # port 587 = TLS
     MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "benhailelpadrey@gmail.com")
-    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "tnqa hesa livx bjxu")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "hweg edpd wptj axwb")
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER") or MAIL_USERNAME
 
 
@@ -38,6 +39,7 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+    TICKET_REQUIRE_CONFIGURED_KEY = True
 
 
 class TestingConfig(Config):

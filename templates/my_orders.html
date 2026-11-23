@@ -21,8 +21,8 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-1"><i class="fas fa-calendar me-2"></i>{{ order.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                    <p class="text-muted mb-1"><i class="fas fa-clock me-2"></i>Est. ready: {{ order.estimated_ready_time.strftime('%I:%M %p') if order.estimated_ready_time else 'N/A' }}</p>
                     <p class="mb-3"><i class="fas fa-dollar-sign me-2"></i>Total: <strong>${{ "%.2f"|format(order.total_amount) }}</strong></p>
+                    {% if current_user.role == 'student' %}<a href="{{ url_for('order_confirmation', order_id=order.id) }}" class="btn btn-outline-success btn-sm mb-3">View or download meal ticket</a>{% endif %}
                     <h6>Items:</h6>
                     <ul class="list-group mb-3">
                         {% for item in order.items %}

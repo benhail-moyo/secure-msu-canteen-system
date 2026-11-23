@@ -1,0 +1,115 @@
+<mxfile host="Electron" agent="Codex">
+  <diagram id="DFD-00-context" name="Level 0 context">
+    <mxGraphModel dx="1852" dy="815" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="student" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF2F7;strokeColor=#718096;strokeWidth=2;fontColor=#182B40;fontSize=18;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;Student&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="60" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="staff" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF2F7;strokeColor=#718096;strokeWidth=2;fontColor=#182B40;fontSize=18;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;Cashier&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="60" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="system" parent="1" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#DDEDFD;strokeColor=#2774B8;strokeWidth=2;fontColor=#182B40;fontSize=18;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;0  MSU Canteen System&lt;/b&gt;&lt;br&gt;accounts, orders, tickets, collection" vertex="1">
+          <mxGeometry height="250" width="450" x="575" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="manager" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF2F7;strokeColor=#718096;strokeWidth=2;fontColor=#182B40;fontSize=18;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;Manager&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="1400" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="admin" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF2F7;strokeColor=#718096;strokeWidth=2;fontColor=#182B40;fontSize=18;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;Administrator&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="1390" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="smtp" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EEF2F7;strokeColor=#718096;strokeWidth=2;fontColor=#182B40;fontSize=18;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;SMTP relay&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="1390" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="student" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=1;exitY=0.3333333333333333;exitPerimeter=0;entryX=0;entryY=0.2;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="system" value="account / cart / demo choice">
+          <mxGeometry relative="1" x="-0.0015" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="183.3" />
+              <mxPoint x="350" y="258.3" />
+              <mxPoint x="550" y="258.3" />
+              <mxPoint x="550" y="365" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="system" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=0;exitY=0.4;exitPerimeter=0;entryX=1;entryY=0.6666666666666666;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="student" value="menu / order / signed ticket">
+          <mxGeometry relative="1" x="0.0564" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="510" y="415" />
+              <mxPoint x="510" y="320" />
+              <mxPoint x="320" y="320" />
+              <mxPoint x="320" y="216.7" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="staff" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=1;exitY=0.3333333333333333;exitPerimeter=0;entryX=0;entryY=0.6;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="system" value="scan / approval">
+          <mxGeometry relative="1" x="0.4759" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="300" y="465" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="system" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=0;exitY=0.8;exitPerimeter=0;entryX=1;entryY=0.6666666666666666;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="staff" value="ticket result / order items">
+          <mxGeometry relative="1" x="-0.1366" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="560" y="515" />
+              <mxPoint x="560" y="631.7" />
+              <mxPoint x="360" y="631.7" />
+              <mxPoint x="360" y="776.7" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="manager" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=0;exitY=0.3333333333333333;exitPerimeter=0;entryX=1;entryY=0.1666666666666667;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="system" value="menu / order / alert changes">
+          <mxGeometry relative="1" x="-0.0457" y="-5" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1390" y="203.3" />
+              <mxPoint x="1050" y="203.3" />
+              <mxPoint x="1050" y="356.7" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="system" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=1;exitY=0.3333333333333333;exitPerimeter=0;entryX=0;entryY=0.6666666666666666;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="manager" value="orders / totals / alerts">
+          <mxGeometry relative="1" x="0.2336" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1110" y="398.3" />
+              <mxPoint x="1110" y="260" />
+              <mxPoint x="1360" y="260" />
+              <mxPoint x="1360" y="216.7" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="admin" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=0;exitY=0.3333333333333333;exitPerimeter=0;entryX=1;entryY=0.5;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="system" value="dashboard request">
+          <mxGeometry relative="1" x="-0.0635" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1265" y="438.3333333333333" />
+              <mxPoint x="1265" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="system" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;exitX=0.994;exitY=0.685;exitDx=0;exitDy=0;exitPerimeter=0;" target="admin" value="counts">
+          <mxGeometry relative="1" x="-0.0335" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="1040" y="480" as="sourcePoint" />
+            <mxPoint x="1355" y="469.9966666666667" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="system" style="edgeStyle=segmentEdgeStyle;rounded=0;html=0;endArrow=block;endFill=1;exitX=1;exitY=0.8333333333333334;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;strokeColor=#697E91;strokeWidth=1.5;fontColor=#344A5F;fontSize=13;labelBackgroundColor=#FFFFFF;" target="smtp" value="verification email">
+          <mxGeometry relative="1" x="0.0005" as="geometry">
+            <Array as="points">
+              <mxPoint x="1040" y="523.3" />
+              <mxPoint x="1040" y="695" />
+              <mxPoint x="1330" y="695" />
+              <mxPoint x="1330" y="760" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

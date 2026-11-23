@@ -137,14 +137,18 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
     order_number = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    ticket_code = db.Column(db.String(32), unique=True, index=True)
+    ticket_extension_days = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    payment_method = db.Column(db.String(30))
+    paid_at = db.Column(db.DateTime)
+    collected_at = db.Column(db.DateTime)
+    collected_by_id = db.Column(db.Integer, db.ForeignKey("students.id"))
 
     student_id = db.Column(
         db.Integer,
         db.ForeignKey("students.id"),
         nullable=False
     )
-
-    student = db.relationship("Student", backref="orders")
 
     status = db.Column(db.String(20), default="pending", index=True)
 
@@ -161,6 +165,8 @@ class Order(db.Model):
     )
 
     estimated_ready_time = db.Column(db.DateTime)
+
+    student = db.relationship("Student", foreign_keys=[student_id], backref="orders")
 
     items = db.relationship(
         "OrderItem",
@@ -180,9 +186,7 @@ class Order(db.Model):
             "status": self.status,
             "total_amount": self.total_amount,
             "items": [item.to_dict() for item in self.items],
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "estimated_ready_time": self.estimated_ready_time.isoformat()
-            if self.estimated_ready_time else None
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
 
@@ -238,9 +242,13 @@ class PasswordResetToken(db.Model):
 
     token = db.Column(db.String(128), unique=True, nullable=False, index=True)
 
+    otp_code = db.Column(db.String(6), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     expires_at = db.Column(db.DateTime, nullable=False)
+
+    otp_verified = db.Column(db.Boolean, default=False)
 
     used_at = db.Column(db.DateTime)
 
@@ -277,3 +285,49 @@ class Feedback(db.Model):
 
     def __repr__(self):
         return f"<Feedback {self.id}>"
+
+
+class Alert(db.Model):
+    __tablename__ = "alerts"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    title = db.Column(db.String(200), nullable=False)
+
+    message = db.Column(db.Text, nullable=False)
+
+    alert_type = db.Column(db.String(20), nullable=False)  # 'info', 'warning', 'urgent'
+
+    is_active = db.Column(db.Boolean, default=True)
+
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False
+    )
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    expires_at = db.Column(db.DateTime)
+
+    manager = db.relationship("Student", backref="alerts")
+
+    def __repr__(self):
+        return f"<Alert {self.title}>"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "message": self.message,
+            "alert_type": self.alert_type,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None
+        }

@@ -3,50 +3,63 @@
     --msu-blue: #1e06f3;
     --msu-gold: #FFD700;
     --primary-color: #0118e9;
-    --bg-color: #f8f9fa;
-    --body-color: #1f2933;
-    --body-muted-color: #6c757d;
-    --card-bg: #ffffff;
-    --card-border: #e9ecef;
-    --panel-bg: #ffffff;
-    --panel-muted: #f2f4f7;
-    --text-on-primary: #ffffff;
-    --nav-bg: #0118e9;
+    --nav-bg: #198754;
     --nav-link-color: #ffffff;
-    --hero-bg: linear-gradient(135deg, var(--msu-blue) 0%, #0415ff 100%);
-    --shadow-color: rgba(0, 0, 0, 0.15);
-    --table-striped: #f8f9fa;
+    --card-bg: #ffffff;
+    --card-border: #dee2e6;
+    --body-color: #212529;
+    --body-muted-color: #6c757d;
+    --panel-bg: #ffffff;
+    --panel-muted: #f8f9fa;
+    --table-striped: #f2f2f2;
 }
 
 body[data-theme="dark"] {
-    --bg-color: #10151d;
-    --body-color: #eef2f7;
-    --body-muted-color: #aebbc7;
-    --card-bg: #182231;
-    --card-border: #2a374a;
-    --panel-bg: #202b38;
-    --panel-muted: #16202a;
-    --text-on-primary: #ffffff;
-    --nav-bg: #051b2d;
-    --nav-link-color: #edf7ff;
-    --hero-bg: linear-gradient(135deg, #132738 0%, #051b2d 100%);
-    --shadow-color: rgba(0, 0, 0, 0.45);
-    --table-striped: #182231;
+    --nav-bg: #0e1931;
+    --nav-link-color: #eef3ff;
+    --card-bg: #17243a;
+    --card-border: #2b3b55;
+    --body-color: #e8eef8;
+    --body-muted-color: #b9c5d6;
+    --panel-bg: #111d31;
+    --panel-muted: #23334d;
+    --table-striped: #1c2a40;
+    background-color: #0b1424;
+    color: var(--body-color);
 }
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--body-color);
+    background-color: #f8f9fa;
 }
 
 .navbar {
-    box-shadow: 0 2px 10px var(--shadow-color);
+    box-shadow: 0 2px 10px rgb(2, 49, 255);
 }
 
 .navbar-brand {
     font-weight: 700;
     color: var(--nav-link-color) !important;
+}
+
+.theme-toggle {
+    border: 0;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus {
+    background: transparent;
+}
+
+.theme-toggle:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
 }
 
 body[data-theme="dark"] .navbar {
@@ -76,39 +89,13 @@ body[data-theme="dark"] .dropdown-item:hover {
     border-color: var(--msu-blue);
 }
 
-.register-btn {
-    background-color: #ffffff;
-    border-color: #ffffff;
-    color: var(--msu-blue);
-}
-
-.register-btn:hover,
-.register-btn:focus {
-    background-color: var(--msu-gold);
-    border-color: var(--msu-gold);
-    color: #111827;
-}
-
-body[data-theme="dark"] .register-btn {
-    background-color: var(--msu-blue);
-    border-color: var(--msu-blue);
-    color: var(--text-on-primary);
-}
-
-body[data-theme="dark"] .register-btn:hover,
-body[data-theme="dark"] .register-btn:focus {
-    background-color: #203d70;
-    border-color: #203d70;
-    color: #eef2f7;
-}
-
 .btn-primary:hover {
     background-color: #0004f8;
     border-color: #0319d8;
 }
 
 .hero-section {
-    background: var(--hero-bg);
+    background: linear-gradient(135deg, var(--msu-blue) 0%, #0415ff 100%);
     color: white;
     padding: 80px 0;
     margin-bottom: 40px;
@@ -229,6 +216,22 @@ body[data-theme="dark"] .input-group-text {
     border-color: var(--card-border);
 }
 
+body[data-theme="dark"] .password-strength .progress {
+    background-color: var(--panel-muted);
+}
+
+body[data-theme="dark"] .password-strength .text-success {
+    color: #75d39a !important;
+}
+
+body[data-theme="dark"] .password-strength .text-warning {
+    color: #ffda70 !important;
+}
+
+body[data-theme="dark"] .password-strength .text-danger {
+    color: #ff99a6 !important;
+}
+
 body[data-theme="dark"] .text-muted,
 body[data-theme="dark"] .small,
 body[data-theme="dark"] label,
@@ -287,15 +290,6 @@ body[data-theme="dark"] .alert-secondary {
 
 body[data-theme="dark"] .footer {
     background-color: #0e1931;
-}
-
-body[data-theme="dark"] .theme-toggle {
-    border-color: rgba(255,255,255,0.55);
-}
-
-body[data-theme="dark"] .theme-toggle:hover {
-    background-color: #ffc107;
-    color: #04151e;
 }
 
 .order-status {
