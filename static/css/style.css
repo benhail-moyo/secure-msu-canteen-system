@@ -192,11 +192,35 @@ body[data-theme="dark"] .dropdown-item:hover {
     background-color: #17a2b8;
 }
 
-.footer {
+.site-footer {
     background-color: #2d2d2d;
     color: white;
-    padding: 40px 0;
-    margin-top: 60px;
+    padding: 1rem 0 0.65rem;
+    margin-top: 1.5rem;
+}
+
+.site-footer .row {
+    row-gap: 0.75rem;
+}
+
+.site-footer h5 {
+    font-size: 1rem;
+    margin-bottom: 0.35rem;
+}
+
+.site-footer p,
+.site-footer ul {
+    font-size: 0.875rem;
+    line-height: 1.3;
+    margin-bottom: 0;
+}
+
+.site-footer hr {
+    margin: 0.75rem 0;
+}
+
+.site-footer .text-center {
+    font-size: 0.75rem;
 }
 
 .form-control:focus {
@@ -325,7 +349,7 @@ body[data-theme="dark"] .alert-secondary {
     color: #eef2f7;
 }
 
-body[data-theme="dark"] .footer {
+body[data-theme="dark"] .site-footer {
     background-color: #0e1931;
 }
 
