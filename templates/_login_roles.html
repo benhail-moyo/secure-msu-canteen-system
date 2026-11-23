@@ -1,0 +1,22 @@
+{% set login_roles = [
+    ('login', 'Student', 'user-graduate'),
+    ('admin_login', 'Admin', 'user-shield'),
+    ('manager_login', 'Manager', 'chart-line'),
+    ('staff_login', 'Staff', 'user-tie')
+] %}
+<div class="dropdown mb-3">
+    <button class="btn btn-outline-primary dropdown-toggle w-100 text-start" type="button"
+            id="loginRoleDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+        Sign in as {% for endpoint, role, icon in login_roles if endpoint == request.endpoint %}{{ role }}{% endfor %}
+    </button>
+    <ul class="dropdown-menu w-100" aria-labelledby="loginRoleDropdown">
+        {% for endpoint, role, icon in login_roles %}
+        <li>
+            <a class="dropdown-item{% if endpoint == request.endpoint %} active{% endif %}"
+               href="{{ url_for(endpoint) }}"{% if endpoint == request.endpoint %} aria-current="page"{% endif %}>
+                <i class="fas fa-{{ icon }} me-2" aria-hidden="true"></i>{{ role }} Login
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>

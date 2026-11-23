@@ -95,36 +95,10 @@
 
                 {% else %}
 
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="loginDropdown" role="button" data-bs-toggle="dropdown">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">
                             <i class="fas fa-sign-in-alt me-1"></i>Login
                         </a>
-
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('login') }}">
-                                    <i class="fas fa-user-graduate me-2"></i>Student Login
-                                </a>
-                            </li>
-
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('admin_login') }}">
-                                    <i class="fas fa-user-shield me-2"></i>Admin Login
-                                </a>
-                            </li>
-
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('manager_login') }}">
-                                    <i class="fas fa-chart-line me-2"></i>Manager Login
-                                </a>
-                            </li>
-
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('staff_login') }}">
-                                    <i class="fas fa-user-tie me-2"></i>Staff Login
-                                </a>
-                            </li>
-                        </ul>
                     </li>
 
                     <li class="nav-item">
