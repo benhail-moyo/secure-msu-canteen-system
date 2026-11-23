@@ -2,7 +2,14 @@
 {% block title %}Menu - MSU Canteen{% endblock %}
 {% block content %}
 <div class="container py-5">
-    <h1 class="mb-4">Our Menu</h1>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+        <h1 class="mb-0">Our Menu</h1>
+        {% if session.get('cart') %}
+        <a href="{{ url_for('cart') }}" class="btn btn-outline-primary">
+            <i class="fas fa-shopping-cart me-1" aria-hidden="true"></i>View Cart
+        </a>
+        {% endif %}
+    </div>
     <form action="{{ url_for('menu') }}" method="get" class="menu-search mb-3" role="search">
         <label class="visually-hidden" for="menu-search">Search menu items</label>
         <div class="input-group">
@@ -47,7 +54,7 @@
                     </div>
                 </div>
                 <div class="card-footer bg-white border-0">
-                    <form action="{{ url_for('add_to_cart', item_id=item.id) }}" method="post" class="d-flex gap-2">
+                    <form action="{{ url_for('add_to_cart', item_id=item.id, category=selected_category or None, q=search_query or None) }}" method="post" class="d-flex gap-2">
                         <input type="number" name="quantity" class="form-control" value="1" min="1" max="10" style="width: 70px;">
                         <button type="submit" class="btn btn-primary flex-grow-1"><i class="fas fa-cart-plus me-1"></i> Add</button>
                     </form>

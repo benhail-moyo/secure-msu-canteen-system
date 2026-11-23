@@ -1238,21 +1238,22 @@ def register_routes(app):
     @app.route("/cart/add/<int:item_id>", methods=["POST"])
     def add_to_cart(item_id):
         item = MenuItem.query.get_or_404(item_id)
+        menu_url = url_for("menu", category=request.args.get("category"), q=request.args.get("q"))
 
         if not item.is_available:
             flash("This item is currently unavailable.", "danger")
-            return redirect(url_for("menu"))
+            return redirect(menu_url)
 
         quantity = request.form.get("quantity", 1, type=int)
         if quantity is None or not 1 <= quantity <= 10:
             flash("Choose a quantity from 1 to 10.", "danger")
-            return redirect(url_for("menu"))
+            return redirect(menu_url)
         cart_data = session.get("cart", {})
         cart_data[str(item_id)] = min(10, cart_data.get(str(item_id), 0) + quantity)
         session["cart"] = cart_data
 
         flash(f"{item.name} added to cart!", "success")
-        return redirect(url_for("cart"))
+        return redirect(menu_url)
 
     @app.route("/cart/update/<int:item_id>", methods=["POST"])
     def update_cart(item_id):
