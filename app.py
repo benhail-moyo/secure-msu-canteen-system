@@ -1,8 +1,9 @@
+from calendar import month_abbr, month_name
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, render_template_string
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import inspect, text
+from sqlalchemy import String, cast, extract, inspect, or_, text
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import os
@@ -281,7 +282,17 @@ def register_routes(app):
     def index():
         if current_user.is_authenticated:
             return redirect_user_by_role(current_user)
-        return redirect(url_for("login"))
+        categories = Category.query.filter_by(
+            is_active=True
+        ).order_by(Category.display_order).all()
+        featured_items = MenuItem.query.filter_by(
+            is_available=True
+        ).order_by(MenuItem.id).limit(3).all()
+        return render_template(
+            "index.html",
+            categories=categories,
+            featured_items=featured_items
+        )
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
@@ -1177,19 +1188,16 @@ def register_routes(app):
     @app.route("/menu")
     def menu():
         category_id = request.args.get("category")
-        search_query = request.args.get("q")
+        search_query = request.args.get("q", "").strip()
+        items_query = MenuItem.query.filter_by(is_available=True)
 
         if category_id:
-            items = MenuItem.query.filter_by(
-                category_id=category_id, is_available=True
-            ).all()
-        elif search_query:
-            items = MenuItem.query.filter(
-                MenuItem.is_available == True,
+            items_query = items_query.filter_by(category_id=category_id)
+        if search_query:
+            items_query = items_query.filter(
                 MenuItem.name.ilike(f"%{search_query}%")
-            ).all()
-        else:
-            items = MenuItem.query.filter_by(is_available=True).all()
+            )
+        items = items_query.all()
 
         categories = Category.query.filter_by(
             is_active=True
@@ -1199,7 +1207,8 @@ def register_routes(app):
             "menu.html",
             items=items,
             categories=categories,
-            selected_category=category_id
+            selected_category=category_id,
+            search_query=search_query
         )
 
     @app.route("/menu/<int:item_id>")
@@ -1349,14 +1358,48 @@ def register_routes(app):
     @app.route("/orders")
     @login_required
     def my_orders():
-        if current_user.role == "student":
-            orders = Order.query.filter_by(
-                student_id=current_user.id
-            ).order_by(Order.created_at.desc()).all()
-        else:
-            orders = Order.query.order_by(Order.created_at.desc()).all()
+        search_term = request.args.get("q", "").strip()
+        page = max(request.args.get("page", 1, type=int), 1)
 
-        return render_template("my_orders.html", orders=orders)
+        if current_user.role == "student":
+            orders_query = Order.query.filter_by(
+                student_id=current_user.id
+            )
+        else:
+            orders_query = Order.query
+
+        for token in search_term.split():
+            matches = [
+                Order.order_number.ilike(f"%{token}%"),
+                Order.ticket_code.ilike(f"%{token}%"),
+                cast(Order.created_at, String).ilike(f"%{token}%"),
+                cast(Order.total_amount, String).ilike(f"%{token.lstrip('$')}%"),
+            ]
+            month = next(
+                (
+                    value for value in range(1, 13)
+                    if token.casefold() in {
+                        month_name[value].casefold(), month_abbr[value].casefold()
+                    }
+                ),
+                None,
+            )
+            if month:
+                matches.append(extract("month", Order.created_at) == month)
+            amount_token = token.replace("$", "").replace(",", "")
+            try:
+                matches.append(Order.total_amount == float(amount_token))
+            except ValueError:
+                pass
+            orders_query = orders_query.filter(or_(*matches))
+
+        orders = orders_query.order_by(Order.created_at.desc()).paginate(
+            page=page, per_page=10, error_out=False
+        )
+
+        return render_template(
+            "my_orders.html", orders=orders, search_term=search_term
+        )
 
     @app.route("/order/<int:order_id>/status")
     @login_required

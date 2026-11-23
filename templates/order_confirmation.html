@@ -1,48 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Order Confirmation - MSU Canteen{% endblock %}
+{% block title %}Meal Ticket - MSU Canteen{% endblock %}
 {% block content %}
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card border-0 shadow">
-                <div class="card-body text-center p-5">
-                    <div class="mb-4"><i class="fas fa-check-circle fa-5x text-success"></i></div>
-                    <h2 class="mb-3">Order Placed Successfully!</h2>
-                    <p class="text-muted">Thank you for your order. Your order number is:</p>
-                    <h3 class="text-primary mb-4">{{ order.order_number }}</h3>
-                    {% if current_user.role == 'student' and signed_ticket %}
-                    <div class="border rounded p-3 mb-4" aria-label="Meal ticket">
-                        <h5>Meal ticket</h5>
-                        <div id="ticket-qr" class="d-flex justify-content-center mb-3"></div>
-                        <svg id="ticket-barcode" class="mw-100"></svg>
-                        <p class="mb-1">Ticket code: <strong>{{ order.ticket_code }}</strong></p>
-                        <p class="mb-1">Registration number: <strong>{{ current_user.student_id }}</strong></p>
-                        <p class="mb-1">Expires: <strong>{{ expires_at.strftime('%d %b %Y at %H:%M') }} (Zimbabwe time)</strong></p>
-                        <small class="text-muted">Show the signed QR code or barcode, or give staff both details above. The ticket can be collected once.</small>
-                        <div class="mt-3"><button type="button" id="download-ticket" class="btn btn-success" disabled><i class="fas fa-download me-2"></i>Download ticket (PNG)</button></div>
-                    </div>
-                    {% endif %}
-                    <hr>
-                    <div class="text-start">
-                        <h5>Order Details</h5>
-                        <p><strong>Date:</strong> {{ order.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                        <p><strong>Status:</strong> <span class="badge bg-warning">{{ order.status|title }}</span></p>
-                        <p><strong>Total:</strong> ${{ "%.2f"|format(order.total_amount) }}</p>
-                        <h6 class="mt-3">Items Ordered:</h6>
-                        <ul class="list-group">
-                            {% for item in order.items %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center">{{ item.menu_item.name }}<span class="badge bg-primary rounded-pill">x{{ item.quantity }}</span></li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    <hr>
-                    <div class="d-grid gap-2">
-                        <a href="{{ url_for('my_orders') }}" class="btn btn-primary"><i class="fas fa-list me-2"></i>View My Orders</a>
-                        <a href="{{ url_for('index') }}" class="btn btn-outline-primary"><i class="fas fa-home me-2"></i>Back to Home</a>
-                    </div>
-                </div>
-            </div>
+<div class="container py-3 py-lg-4">
+    <div class="ticket-heading text-center mb-3">
+        <div class="text-success mb-1"><i class="fas fa-circle-check fa-lg" aria-hidden="true"></i></div>
+        <h1 class="h3 mb-1">{% if signed_ticket %}Your meal ticket{% else %}Order details{% endif %}</h1>
+        <p class="text-muted mb-0">{% if signed_ticket %}Keep this ticket ready to collect your meal.{% else %}Order #{{ order.order_number }}{% endif %}</p>
+    </div>
+
+    <section class="meal-ticket mx-auto" aria-label="Meal ticket">
+        {% if current_user.role == 'student' and signed_ticket %}
+        <div class="meal-ticket-codes">
+            <div id="ticket-qr" class="ticket-qr" role="img" aria-label="Signed meal ticket QR code"></div>
+            <svg id="ticket-barcode" class="ticket-barcode" role="img" aria-label="Ticket code barcode"></svg>
         </div>
+        {% endif %}
+        <div class="meal-ticket-details">
+            <details class="ticket-order-details">
+                <summary class="ticket-order-summary">
+                    Order Details
+                    <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                </summary>
+                <div class="ticket-details-content">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                        <div>
+                            <p class="text-success text-uppercase fw-bold small mb-1">MSU Canteen</p>
+                            <h2 class="h4 mb-0">Order #{{ order.order_number }}</h2>
+                        </div>
+                        <span class="badge rounded-pill bg-{% if order.status == 'completed' %}primary{% elif order.status == 'cancelled' %}danger{% elif order.status == 'ready' %}success{% else %}warning{% endif %}">{{ order.status|title }}</span>
+                    </div>
+
+                    <div class="ticket-meta">
+                        <div><span class="ticket-label">Date</span><strong>{{ order.created_at.strftime('%d %b %Y, %I:%M %p') }}</strong></div>
+                        <div><span class="ticket-label">Total</span><strong>${{ "%.2f"|format(order.total_amount) }}</strong></div>
+                        {% if current_user.role == 'student' and signed_ticket %}
+                        <div><span class="ticket-label">Ticket code</span><strong>{{ order.ticket_code }}</strong></div>
+                        <div><span class="ticket-label">Registration</span><strong>{{ current_user.student_id }}</strong></div>
+                        <div class="ticket-expiry"><span class="ticket-label">Expires</span><strong>{{ expires_at.strftime('%d %b %Y at %H:%M') }} (Zimbabwe time)</strong></div>
+                        {% endif %}
+                    </div>
+
+                    <div class="ticket-items mt-3">
+                        <span class="ticket-label">Items</span>
+                        <div>
+                            {% for item in order.items %}
+                            <span class="ticket-item">{{ item.menu_item.name }} <strong>×{{ item.quantity }}</strong></span>{% if not loop.last %}<span class="text-muted"> · </span>{% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% if current_user.role == 'student' and signed_ticket %}
+                    <p class="small text-muted mt-2 mb-2">Show the QR code or barcode to staff. This ticket can be collected once.</p>
+                    <button type="button" id="download-ticket" class="btn btn-success btn-sm" disabled><i class="fas fa-download me-2"></i>Download ticket (PNG)</button>
+                    {% endif %}
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <div class="ticket-actions mx-auto mt-3">
+        <a href="{{ url_for('my_orders') }}" class="btn btn-primary"><i class="fas fa-list me-2"></i>View my orders</a>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary"><i class="fas fa-house me-2"></i>Back home</a>
     </div>
 </div>
 {% endblock %}
@@ -53,8 +70,8 @@
 <script>
 const ticketCode = {{ order.ticket_code|tojson }};
 const signedTicket = {{ signed_ticket|tojson }};
-if (window.QRCode) new QRCode(document.getElementById('ticket-qr'), {text: signedTicket, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.L});
-if (window.JsBarcode) JsBarcode('#ticket-barcode', ticketCode, {format: 'CODE128', width: 2, height: 55});
+if (window.QRCode) new QRCode(document.getElementById('ticket-qr'), {text: signedTicket, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.L});
+if (window.JsBarcode) JsBarcode('#ticket-barcode', ticketCode, {format: 'CODE128', width: 1.5, height: 42, margin: 0});
 const downloadButton = document.getElementById('download-ticket');
 const qrContainer = document.getElementById('ticket-qr');
 const barcodeElement = document.getElementById('ticket-barcode');
