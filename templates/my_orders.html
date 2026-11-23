@@ -2,47 +2,109 @@
 {% block title %}My Orders - MSU Canteen{% endblock %}
 {% block content %}
 <div class="container py-5">
-    <h1 class="mb-4"><i class="fas fa-list me-2"></i>My Orders</h1>
-    {% if orders %}
-    <div class="row">
-        {% for order in orders %}
-        <div class="col-md-6 mb-4">
-            <div class="card border-0 shadow">
-                <div class="card-header bg-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Order #{{ order.order_number }}</h5>
-                        {% if order.status == 'pending' %}<span class="badge bg-secondary">{{ order.status|title }}</span>
-                        {% elif order.status == 'confirmed' %}<span class="badge bg-info">{{ order.status|title }}</span>
-                        {% elif order.status == 'preparing' %}<span class="badge bg-warning">{{ order.status|title }}</span>
-                        {% elif order.status == 'ready' %}<span class="badge bg-success">{{ order.status|title }}</span>
-                        {% elif order.status == 'completed' %}<span class="badge bg-primary">{{ order.status|title }}</span>
-                        {% elif order.status == 'cancelled' %}<span class="badge bg-danger">{{ order.status|title }}</span>{% endif %}
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted mb-1"><i class="fas fa-calendar me-2"></i>{{ order.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                    <p class="mb-3"><i class="fas fa-dollar-sign me-2"></i>Total: <strong>${{ "%.2f"|format(order.total_amount) }}</strong></p>
-                    {% if current_user.role == 'student' %}<a href="{{ url_for('order_confirmation', order_id=order.id) }}" class="btn btn-outline-success btn-sm mb-3">View or download meal ticket</a>{% endif %}
-                    <h6>Items:</h6>
-                    <ul class="list-group mb-3">
-                        {% for item in order.items %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center py-1">{{ item.menu_item.name }}<span class="badge bg-primary rounded-pill">x{{ item.quantity }}</span></li>
-                        {% endfor %}
-                    </ul>
-                    {% if order.status == 'completed' and not order.feedback %}
-                    <a href="{{ url_for('submit_feedback', order_id=order.id) }}" class="btn btn-outline-primary btn-sm"><i class="fas fa-star me-1"></i>Leave Feedback</a>
-                    {% elif order.feedback %}<span class="badge bg-success"><i class="fas fa-check me-1"></i>Feedback Submitted</span>{% endif %}
-                </div>
-            </div>
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+        <div>
+            <p class="text-success text-uppercase fw-semibold small mb-1">Order history</p>
+            <h1 class="mb-0"><i class="fas fa-receipt me-2"></i>My Orders</h1>
         </div>
-        {% endfor %}
+        <a href="{{ url_for('menu') }}" class="btn btn-success"><i class="fas fa-plus me-2"></i>Place an order</a>
+    </div>
+
+    <form method="GET" action="{{ url_for('my_orders') }}" class="mb-4">
+        <label for="order-search" class="form-label fw-semibold">Find an order</label>
+        <div class="input-group input-group-lg">
+            <span class="input-group-text"><i class="fas fa-search" aria-hidden="true"></i></span>
+            <input id="order-search" class="form-control" type="search" name="q" value="{{ search_term }}"
+                   placeholder="Search date, total, ticket code or order number" aria-describedby="search-help">
+            <button class="btn btn-primary" type="submit">Search</button>
+            {% if search_term %}<a class="btn btn-outline-secondary" href="{{ url_for('my_orders') }}">Clear</a>{% endif %}
+        </div>
+        <div id="search-help" class="form-text">Search one or more terms, such as a date and ticket code.</div>
+    </form>
+
+    {% if orders.items %}
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Order / Ticket</th>
+                        <th scope="col">Items</th>
+                        <th scope="col">Total</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders.items %}
+                    <tr>
+                        <td class="text-nowrap">
+                            <div class="fw-semibold">{{ order.created_at.strftime('%d %b %Y') }}</div>
+                            <small class="text-muted">{{ order.created_at.strftime('%I:%M %p') }}</small>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">#{{ order.order_number }}</div>
+                            {% if order.ticket_code %}<small class="text-muted">Ticket: {{ order.ticket_code }}</small>{% endif %}
+                        </td>
+                        <td>
+                            {% for item in order.items %}
+                                <span class="text-nowrap">{{ item.menu_item.name }} <span class="text-muted">×{{ item.quantity }}</span></span>{% if not loop.last %}<span class="text-muted">, </span>{% endif %}
+                            {% else %}<span class="text-muted">No items</span>{% endfor %}
+                        </td>
+                        <td class="text-nowrap fw-semibold">${{ "%.2f"|format(order.total_amount) }}</td>
+                        <td><span class="badge rounded-pill bg-{% if order.status == 'pending' %}secondary{% elif order.status == 'confirmed' %}info{% elif order.status == 'preparing' %}warning{% elif order.status == 'ready' %}success{% elif order.status == 'completed' %}primary{% elif order.status == 'cancelled' %}danger{% else %}secondary{% endif %}">{{ order.status|title }}</span></td>
+                        <td class="text-end text-nowrap">
+                            {% if current_user.role == 'student' %}
+                            <a href="{{ url_for('order_confirmation', order_id=order.id) }}" class="btn btn-outline-success btn-sm" aria-label="View ticket for order {{ order.order_number }}">
+                                <i class="fas fa-ticket me-1" aria-hidden="true"></i>View ticket
+                            </a>
+                            {% endif %}
+                            {% if order.status == 'completed' and not order.feedback %}
+                            <a href="{{ url_for('submit_feedback', order_id=order.id) }}" class="btn btn-outline-primary btn-sm">Feedback</a>
+                            {% elif order.feedback %}<span class="badge bg-success">Feedback submitted</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <small class="text-muted">Showing {{ (orders.page - 1) * orders.per_page + 1 }}–{{ (orders.page - 1) * orders.per_page + orders.items|length }} of {{ orders.total }} orders</small>
+            {% if orders.pages > 1 %}
+            <nav aria-label="Order pages">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {% if not orders.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('my_orders', q=search_term, page=orders.prev_num) if orders.has_prev else '#' }}" {% if not orders.has_prev %}aria-disabled="true" tabindex="-1"{% endif %}>Previous</a>
+                    </li>
+                    {% for page_num in orders.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                        <li class="page-item {% if page_num == orders.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('my_orders', q=search_term, page=page_num) }}" {% if page_num == orders.page %}aria-current="page"{% endif %}>{{ page_num }}</a>
+                        </li>
+                        {% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not orders.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('my_orders', q=search_term, page=orders.next_num) if orders.has_next else '#' }}" {% if not orders.has_next %}aria-disabled="true" tabindex="-1"{% endif %}>Next</a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+    {% elif search_term %}
+    <div class="text-center rounded-3 bg-light py-5">
+        <i class="fas fa-magnifying-glass fa-3x text-muted mb-3" aria-hidden="true"></i>
+        <h2 class="h4">No matching orders</h2>
+        <p class="text-muted mb-3">Try another date, total, order number or ticket code.</p>
+        <a href="{{ url_for('my_orders') }}" class="btn btn-outline-primary">Clear search</a>
     </div>
     {% else %}
-    <div class="text-center py-5">
-        <i class="fas fa-receipt fa-5x text-muted mb-4"></i>
-        <h3>No orders yet</h3>
-        <p class="text-muted">Start ordering your favorite meals!</p>
-        <a href="{{ url_for('menu') }}" class="btn btn-primary btn-lg"><i class="fas fa-utensils me-2"></i>Browse Menu</a>
+    <div class="text-center rounded-3 bg-light py-5">
+        <i class="fas fa-receipt fa-3x text-muted mb-3" aria-hidden="true"></i>
+        <h2 class="h4">No orders yet</h2>
+        <p class="text-muted mb-3">Your order history will appear here after you place an order.</p>
+        <a href="{{ url_for('menu') }}" class="btn btn-primary"><i class="fas fa-utensils me-2"></i>Browse Menu</a>
     </div>
     {% endif %}
 </div>
