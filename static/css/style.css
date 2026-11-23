@@ -362,6 +362,216 @@ body[data-theme="dark"] .footer {
     overflow: hidden;
 }
 
+.meal-ticket {
+    --ticket-cutout: #f8f9fa;
+    position: relative;
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    max-width: 980px;
+    overflow: hidden;
+    border: 1px solid #dce5df;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 8px 26px rgba(20, 50, 35, 0.1);
+}
+
+.meal-ticket::before,
+.meal-ticket::after {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--ticket-cutout);
+    content: "";
+    transform: translateY(-50%);
+}
+
+.meal-ticket::before {
+    left: -13px;
+}
+
+.meal-ticket::after {
+    right: -13px;
+}
+
+.meal-ticket-codes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 14px 20px;
+    border-right: 1px dashed #b9c9bf;
+}
+
+.ticket-qr {
+    display: flex;
+    width: 190px;
+    height: 190px;
+    align-items: center;
+    justify-content: center;
+}
+
+.ticket-qr img,
+.ticket-qr canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.ticket-barcode {
+    width: 100%;
+    max-width: 205px;
+    height: 46px;
+}
+
+.meal-ticket-details {
+    min-width: 0;
+    padding: 20px 28px;
+}
+
+.ticket-order-summary {
+    display: none;
+}
+
+.ticket-order-details > .ticket-details-content {
+    display: block;
+}
+
+.ticket-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+}
+
+.ticket-meta > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 125px;
+}
+
+.ticket-meta .ticket-expiry {
+    min-width: 230px;
+}
+
+.ticket-label {
+    color: #68756d;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.ticket-items {
+    border-top: 1px dashed #d2ddd5;
+    padding-top: 8px;
+}
+
+.ticket-item {
+    display: inline-block;
+    margin: 2px 3px 2px 0;
+}
+
+.ticket-actions {
+    display: flex;
+    max-width: 980px;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+body[data-theme="dark"] .meal-ticket {
+    --ticket-cutout: #0b1424;
+    border-color: var(--card-border);
+    background: var(--card-bg);
+    color: var(--body-color);
+}
+
+body[data-theme="dark"] .meal-ticket-codes {
+    border-color: var(--card-border);
+}
+
+body[data-theme="dark"] .ticket-label {
+    color: var(--body-muted-color);
+}
+
+body[data-theme="dark"] .ticket-items {
+    border-color: var(--card-border);
+}
+
+body[data-theme="dark"] .table-light,
+body[data-theme="dark"] .bg-light {
+    --bs-table-bg: var(--panel-muted);
+    background-color: var(--panel-muted) !important;
+    color: var(--body-color);
+}
+
+body[data-theme="dark"] .card-footer.bg-white {
+    background-color: var(--card-bg) !important;
+}
+
+@media (max-width: 767.98px) {
+    .meal-ticket {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .meal-ticket-codes {
+        border-right: 0;
+        border-bottom: 1px dashed #b9c9bf;
+    }
+
+    .meal-ticket-details {
+        padding: 18px;
+    }
+
+    .ticket-order-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        color: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .ticket-order-summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .ticket-order-summary:focus-visible {
+        outline: 2px solid var(--msu-blue);
+        outline-offset: 3px;
+    }
+
+    .ticket-order-summary i {
+        transition: transform 0.2s ease;
+    }
+
+    .ticket-order-details[open] > .ticket-order-summary i {
+        transform: rotate(180deg);
+    }
+
+    .ticket-order-details > .ticket-details-content {
+        display: none;
+        padding-top: 8px;
+    }
+
+    .ticket-order-details[open] > .ticket-details-content {
+        display: block;
+    }
+
+    .ticket-actions {
+        justify-content: stretch;
+    }
+
+    .ticket-actions .btn {
+        flex: 1;
+    }
+}
+
 
 /* This targets the navbar background specifically */
 .navbar.navbar-expand-lg {

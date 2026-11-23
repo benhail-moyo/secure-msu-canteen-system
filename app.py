@@ -1,8 +1,9 @@
+from calendar import month_abbr, month_name
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, render_template_string
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import inspect, text
+from sqlalchemy import String, cast, extract, inspect, or_, text
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import os
@@ -1349,14 +1350,48 @@ def register_routes(app):
     @app.route("/orders")
     @login_required
     def my_orders():
-        if current_user.role == "student":
-            orders = Order.query.filter_by(
-                student_id=current_user.id
-            ).order_by(Order.created_at.desc()).all()
-        else:
-            orders = Order.query.order_by(Order.created_at.desc()).all()
+        search_term = request.args.get("q", "").strip()
+        page = max(request.args.get("page", 1, type=int), 1)
 
-        return render_template("my_orders.html", orders=orders)
+        if current_user.role == "student":
+            orders_query = Order.query.filter_by(
+                student_id=current_user.id
+            )
+        else:
+            orders_query = Order.query
+
+        for token in search_term.split():
+            matches = [
+                Order.order_number.ilike(f"%{token}%"),
+                Order.ticket_code.ilike(f"%{token}%"),
+                cast(Order.created_at, String).ilike(f"%{token}%"),
+                cast(Order.total_amount, String).ilike(f"%{token.lstrip('$')}%"),
+            ]
+            month = next(
+                (
+                    value for value in range(1, 13)
+                    if token.casefold() in {
+                        month_name[value].casefold(), month_abbr[value].casefold()
+                    }
+                ),
+                None,
+            )
+            if month:
+                matches.append(extract("month", Order.created_at) == month)
+            amount_token = token.replace("$", "").replace(",", "")
+            try:
+                matches.append(Order.total_amount == float(amount_token))
+            except ValueError:
+                pass
+            orders_query = orders_query.filter(or_(*matches))
+
+        orders = orders_query.order_by(Order.created_at.desc()).paginate(
+            page=page, per_page=10, error_out=False
+        )
+
+        return render_template(
+            "my_orders.html", orders=orders, search_term=search_term
+        )
 
     @app.route("/order/<int:order_id>/status")
     @login_required
