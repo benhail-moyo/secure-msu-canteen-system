@@ -2,3 +2,4 @@ instance/ticket_private_key.pem
 instance/canteen.db
 canteen.db
 .env
+pycache
