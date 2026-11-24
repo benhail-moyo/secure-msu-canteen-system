@@ -16,7 +16,7 @@
         </div>
         {% endif %}
         <div class="meal-ticket-details">
-            <details class="ticket-order-details">
+            <details class="ticket-order-details" open>
                 <summary class="ticket-order-summary">
                     Order Details
                     <i class="fas fa-chevron-down" aria-hidden="true"></i>
@@ -64,6 +64,17 @@
 </div>
 {% endblock %}
 {% block extra_js %}
+<script>
+const ticketOrderDetails = document.querySelector('.ticket-order-details');
+if (ticketOrderDetails) {
+    const smallTicketScreen = window.matchMedia('(max-width: 767.98px)');
+    const syncTicketDetails = event => {
+        ticketOrderDetails.open = !event.matches;
+    };
+    syncTicketDetails(smallTicketScreen);
+    smallTicketScreen.addEventListener('change', syncTicketDetails);
+}
+</script>
 {% if current_user.role == 'student' and signed_ticket %}
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.1/dist/JsBarcode.all.min.js"></script>

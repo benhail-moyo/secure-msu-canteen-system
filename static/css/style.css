@@ -535,6 +535,7 @@ body[data-theme="dark"] .site-footer {
 
 .ticket-order-details > .ticket-details-content {
     display: block;
+    color: var(--body-color);
 }
 
 .ticket-meta {
