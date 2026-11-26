@@ -36,7 +36,7 @@
 
                 {% if current_user.is_authenticated %}
 
-                    {% if current_user.role == "student" %}
+                    {% if current_user.role in ["student", "visitor"] %}
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('my_orders') }}">My Orders</a>
                         </li>
@@ -148,7 +148,7 @@
                         <a href="{{ url_for('menu') }}" class="text-white">View Menu</a>
                     </li>
 
-                    {% if current_user.is_authenticated and current_user.role == "student" %}
+                    {% if current_user.is_authenticated and current_user.role in ["student", "visitor"] %}
                         <li>
                             <a href="{{ url_for('my_orders') }}" class="text-white">Track Orders</a>
                         </li>

@@ -3,9 +3,10 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import String, cast, extract, inspect, or_, text
+from sqlalchemy import String, cast, extract, func, inspect, or_, text
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import hmac
 import os
 import random
 import secrets
@@ -208,10 +209,14 @@ def register_routes(app):
             app.logger.error("Failed to send 2FA email: %s", exc)
             return False
 
+    def email_code_digest(code, user_id, purpose):
+        value = f"{user_id}:{purpose}:{code}".encode("utf-8")
+        return hmac.new(app.secret_key.encode("utf-8"), value, "sha256").hexdigest()
+
     def start_2fa(student, purpose, message, **extra_session_data):
         """Start an email 2FA challenge for a specific purpose."""
-        code = ''.join(random.choices(string.digits, k=6))
-        session['2fa_code'] = code
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        session['2fa_code'] = email_code_digest(code, student.id, purpose)
         session['2fa_purpose'] = purpose
         session['pending_user_id'] = student.id
         for key, value in extra_session_data.items():
@@ -300,16 +305,26 @@ def register_routes(app):
             return redirect_user_by_role(current_user)
 
         if request.method == "POST":
-            student_id = request.form.get("student_id")
-            name = request.form.get("name")
-            email = request.form.get("email")
-            password = request.form.get("password")
-            department = request.form.get("department")
-            phone = request.form.get("phone")
+            account_type = request.form.get("account_type", "student").strip().lower()
+            if account_type not in ["student", "visitor"]:
+                account_type = "student"
 
+            student_id = (request.form.get("student_id") or "").strip()
+            name = (request.form.get("name") or "").strip()
+            email = (request.form.get("email") or "").strip().lower()
+            password = request.form.get("password")
+            department = (request.form.get("department") or "").strip()
+            phone = (request.form.get("phone") or "").strip()
             confirm_password = request.form.get("confirm_password")
 
-            if not student_id or not name or not email or not password:
+            if account_type == "visitor":
+                student_id = ""
+                department = "Visitor"
+            elif not student_id:
+                flash("Please provide your Student ID.", "danger")
+                return render_template("register.html")
+
+            if not name or not email or not password:
                 flash("Please fill in all required fields.", "danger")
                 return render_template("register.html")
 
@@ -339,13 +354,13 @@ def register_routes(app):
                     "warning"
                 )
 
-            existing_id = Student.query.filter_by(student_id=student_id).first()
-            existing_email = Student.query.filter_by(email=email).first()
+            existing_id = Student.query.filter_by(student_id=student_id).first() if account_type == "student" else None
+            existing_email = Student.query.filter(func.lower(Student.email) == email).first()
 
-            if (existing_id is not None and existing_id == existing_email
-                    and existing_id.role == "student" and not existing_id.is_verified
-                    and check_password_hash(existing_id.password_hash, password)):
-                if not start_2fa(existing_id, "registration", "complete your registration"):
+            if (existing_email and existing_email.role == account_type and not existing_email.is_verified
+                    and (account_type == "visitor" or existing_id == existing_email)
+                    and check_password_hash(existing_email.password_hash, password)):
+                if not start_2fa(existing_email, "registration", "complete your registration"):
                     flash("Unable to send verification email right now. Please try again later.", "danger")
                     return render_template("register.html")
                 flash("Please check your email for the verification code.", "success")
@@ -360,13 +375,13 @@ def register_routes(app):
                 return render_template("register.html")
 
             student = Student(
-                student_id=student_id,
+                student_id=student_id or generate_system_user_id("visitor"),
                 name=name,
                 email=email,
                 password_hash=generate_password_hash(password),
                 department=department,
                 phone=phone,
-                role="student",
+                role=account_type,
                 is_verified=False
             )
 
@@ -399,7 +414,9 @@ def register_routes(app):
 
         if request.method == "POST":
             entered_code = request.form.get("code")
-            if entered_code == session['2fa_code']:
+            if entered_code and secrets.compare_digest(
+                email_code_digest(entered_code, session['pending_user_id'], purpose), session['2fa_code']
+            ):
                 user_id = session['pending_user_id']
                 student = Student.query.get(user_id)
                 if student:
@@ -458,14 +475,23 @@ def register_routes(app):
             return redirect_user_by_role(current_user)
 
         if request.method == "POST":
-            email = request.form.get("email")
-            student_id = request.form.get("student_id")
+            login_input = (request.form.get("student_id") or request.form.get("email") or "").strip()
             password = request.form.get("password")
 
-            if email:
-                student = Student.query.filter_by(email=email, role="student").first()
+            if not login_input or not password:
+                flash("Please provide your login credentials.", "danger")
+                return render_template("login.html")
+
+            if "@" in login_input:
+                student = Student.query.filter(
+                    func.lower(Student.email) == login_input.lower(),
+                    Student.role.in_(["student", "visitor"])
+                ).first()
             else:
-                student = Student.query.filter_by(student_id=student_id, role="student").first()
+                student = Student.query.filter(
+                    Student.student_id == login_input,
+                    Student.role.in_(["student", "visitor"])
+                ).first()
 
             if student and check_password_hash(student.password_hash, password):
                 if not student.is_verified:
@@ -502,17 +528,13 @@ def register_routes(app):
             return redirect_user_by_role(current_user)
 
         if request.method == "POST":
-            student_id = request.form.get("student_id", "").strip()
             email = request.form.get("email", "").strip().lower()
-            phone = request.form.get("phone", "").strip()
-            if not student_id or not email or not phone:
-                flash("Please complete all account verification fields.", "danger")
+            if not email:
+                flash("Please enter your email address.", "danger")
                 return render_template("forgot_password.html")
 
-            student = Student.query.filter_by(
-                student_id=student_id,
-                email=email,
-                phone=phone
+            student = Student.query.filter(
+                func.lower(Student.email) == email
             ).first()
             if not student:
                 flash("Those details don't match an account. Check them and try again.", "danger")
@@ -683,6 +705,7 @@ def register_routes(app):
             return redirect_user_by_role(current_user)
 
         total_students = Student.query.filter_by(role="student").count()
+        total_visitors = Student.query.filter_by(role="visitor").count()
         total_staff = Student.query.filter_by(role="staff").count()
         total_orders = Order.query.count()
         total_menu_items = MenuItem.query.count()
@@ -1289,8 +1312,8 @@ def register_routes(app):
     @app.route("/checkout", methods=["GET", "POST"])
     @login_required
     def checkout():
-        if current_user.role != "student":
-            flash("Only students can place orders.", "danger")
+        if current_user.role not in ["student", "visitor"]:
+            flash("Only students and visitors can place orders.", "danger")
             return redirect_user_by_role(current_user)
 
         cart_data = session.get("cart", {})
@@ -1348,7 +1371,7 @@ def register_routes(app):
     def order_confirmation(order_id):
         order = Order.query.get_or_404(order_id)
 
-        if current_user.role == "student" and order.student_id != current_user.id:
+        if current_user.role in ["student", "visitor"] and order.student_id != current_user.id:
             flash("Access denied.", "danger")
             return redirect(url_for("menu"))
 
@@ -1362,7 +1385,7 @@ def register_routes(app):
         search_term = request.args.get("q", "").strip()
         page = max(request.args.get("page", 1, type=int), 1)
 
-        if current_user.role == "student":
+        if current_user.role in ["student", "visitor"]:
             orders_query = Order.query.filter_by(
                 student_id=current_user.id
             )
@@ -1407,7 +1430,7 @@ def register_routes(app):
     def order_status(order_id):
         order = Order.query.get_or_404(order_id)
 
-        if current_user.role == "student" and order.student_id != current_user.id:
+        if current_user.role in ["student", "visitor"] and order.student_id != current_user.id:
             return jsonify({"error": "Access denied"}), 403
 
         return jsonify({"order_number": order.order_number, "status": order.status})
@@ -1415,8 +1438,8 @@ def register_routes(app):
     @app.route("/order/<int:order_id>/feedback", methods=["GET", "POST"])
     @login_required
     def submit_feedback(order_id):
-        if current_user.role != "student":
-            flash("Only students can submit feedback.", "danger")
+        if current_user.role not in ["student", "visitor"]:
+            flash("Only students and visitors can submit feedback.", "danger")
             return redirect_user_by_role(current_user)
 
         order = Order.query.get_or_404(order_id)

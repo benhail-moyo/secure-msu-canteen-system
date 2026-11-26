@@ -17,10 +17,10 @@
                     {% include "_login_roles.html" %}
                     <form method="POST">
                         <div class="mb-3">
-                            <label for="student_id" class="form-label">Student ID</label>
+                            <label for="student_id" class="form-label">Student ID or Email</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="fas fa-id-card"></i></span>
-                                <input type="text" class="form-control" id="student_id" name="student_id" value="{{ request.form.get('student_id', '') }}" required autocomplete="username">
+                                <input type="text" class="form-control" id="student_id" name="student_id" value="{{ request.form.get('student_id', '') }}" required autocomplete="username" placeholder="e.g. R210001X or name@gmail.com">
                             </div>
                         </div>
                         <div class="mb-3">
