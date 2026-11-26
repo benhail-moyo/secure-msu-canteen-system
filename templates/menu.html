@@ -65,6 +65,46 @@
         <div class="col-12"><div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No items found. Try a different search or category.</div></div>
         {% endfor %}
     </div>
+
+    <aside id="menu-cart-popover" class="menu-cart-popover" aria-label="Shopping cart"
+           data-update-url-template="{{ url_for('update_cart', item_id=0) }}"
+           data-remove-url-template="{{ url_for('remove_from_cart', item_id=0) }}"
+           data-clear-url="{{ url_for('clear_cart') }}"
+           {% if not cart_summary.items %}hidden{% endif %}>
+        <div class="menu-cart-header">
+            <div class="menu-cart-desktop-heading">
+                <h2 id="menu-cart-title" class="h6 mb-0">Your cart</h2>
+                <small class="text-muted"><span id="menu-cart-count">{{ cart_summary.count }}</span> items</small>
+            </div>
+            <div class="menu-cart-mobile-header">
+                <button type="button" id="menu-cart-toggle" class="menu-cart-mobile-toggle" aria-expanded="false" aria-controls="menu-cart-content">
+                    <span class="menu-cart-mobile-title">Your cart</span>
+                    <span class="menu-cart-mobile-count"><span id="menu-cart-mobile-count">{{ cart_summary.count }}</span> items</span>
+                    <i class="fas fa-chevron-up" aria-hidden="true"></i>
+                </button>
+                <div class="menu-cart-mobile-tools">
+                    <strong id="menu-cart-mobile-total" class="menu-cart-mobile-total">${{ "%.2f"|format(cart_summary.total) }}</strong>
+                    <button type="button" class="btn btn-sm btn-outline-danger menu-cart-clear-mobile" id="menu-cart-clear-mobile">
+                        <i class="fas fa-trash me-1" aria-hidden="true"></i>Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="menu-cart-content" class="menu-cart-content">
+            <p id="menu-cart-message" class="small text-danger mb-2" role="status" aria-live="polite" hidden></p>
+            <ul id="menu-cart-items" class="menu-cart-items list-unstyled mb-3" aria-label="Items in cart"></ul>
+            <div class="menu-cart-total">
+                <span>Total</span>
+                <strong id="menu-cart-total">${{ "%.2f"|format(cart_summary.total) }}</strong>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-3 menu-cart-clear-desktop" id="menu-cart-clear">
+                <i class="fas fa-trash me-1" aria-hidden="true"></i>Clear cart
+            </button>
+            <a id="menu-cart-checkout" class="btn btn-success w-100 mt-2" href="{{ url_for('checkout') if current_user.is_authenticated else url_for('login', next=url_for('checkout')) }}">
+                <i class="fas fa-credit-card me-2" aria-hidden="true"></i>Proceed to checkout
+            </a>
+        </div>
+    </aside>
 </div>
 {% endblock %}
 {% block extra_js %}
@@ -80,5 +120,202 @@
             photo.addEventListener('error', useFallback, { once: true });
         }
     });
+
+    (function () {
+        const cartPanel = document.getElementById('menu-cart-popover');
+        if (!cartPanel) return;
+
+        const cartList = document.getElementById('menu-cart-items');
+        const cartCount = document.getElementById('menu-cart-count');
+        const cartTotal = document.getElementById('menu-cart-total');
+        const mobileCartCount = document.getElementById('menu-cart-mobile-count');
+        const mobileCartTotal = document.getElementById('menu-cart-mobile-total');
+        const cartMessage = document.getElementById('menu-cart-message');
+        const clearButtons = document.querySelectorAll('#menu-cart-clear, #menu-cart-clear-mobile');
+        const toggleButton = document.getElementById('menu-cart-toggle');
+        const smallCartScreen = window.matchMedia('(max-width: 767.98px)');
+        let cartState = {{ cart_summary|tojson }};
+        let cartRequestPending = false;
+        let cartExpanded = false;
+
+        function setCartExpanded(expanded) {
+            cartExpanded = expanded;
+            cartPanel.classList.toggle('is-expanded', expanded);
+            toggleButton.setAttribute('aria-expanded', String(expanded));
+        }
+
+        function formatPrice(value) {
+            return '$' + Number(value).toFixed(2);
+        }
+
+        function cartUrl(template, itemId) {
+            return template.replace(/\/0$/, '/' + itemId);
+        }
+
+        function makeButton(label, text, action, itemId, disabled) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm btn-outline-secondary';
+            button.textContent = text;
+            button.setAttribute('aria-label', label);
+            button.dataset.cartAction = action;
+            button.dataset.itemId = String(itemId);
+            button.disabled = Boolean(disabled);
+            return button;
+        }
+
+        function renderCart(state) {
+            cartState = state;
+            cartList.replaceChildren();
+            cartCount.textContent = String(state.count);
+            cartTotal.textContent = formatPrice(state.total);
+            mobileCartCount.textContent = String(state.count);
+            mobileCartTotal.textContent = formatPrice(state.total);
+            cartPanel.hidden = state.items.length === 0;
+            if (!state.items.length) setCartExpanded(false);
+            clearButtons.forEach(function (button) {
+                button.disabled = state.items.length === 0;
+            });
+
+            state.items.forEach(function (item) {
+                const row = document.createElement('li');
+                row.className = 'menu-cart-item';
+
+                const details = document.createElement('div');
+                details.className = 'menu-cart-item-details';
+                const name = document.createElement('span');
+                name.className = 'menu-cart-item-name';
+                name.textContent = item.name;
+                const subtotal = document.createElement('strong');
+                subtotal.className = 'menu-cart-item-subtotal';
+                subtotal.textContent = formatPrice(item.subtotal);
+                details.append(name, subtotal);
+
+                const controls = document.createElement('div');
+                controls.className = 'menu-cart-item-controls';
+                controls.append(
+                    makeButton('Remove one ' + item.name, '−', 'decrease', item.id, false)
+                );
+                const quantity = document.createElement('span');
+                quantity.className = 'menu-cart-quantity';
+                quantity.textContent = String(item.quantity);
+                quantity.setAttribute('aria-label', 'Quantity');
+                controls.append(quantity);
+                controls.append(
+                    makeButton('Add one ' + item.name, '+', 'increase', item.id, item.quantity >= 10),
+                    makeButton('Remove ' + item.name, '×', 'remove', item.id, false)
+                );
+
+                row.append(details, controls);
+                cartList.appendChild(row);
+            });
+            setCartControlsDisabled(cartRequestPending);
+        }
+
+        function setCartControlsDisabled(disabled) {
+            document.querySelectorAll('form[action*="/cart/add/"] button[type="submit"]').forEach(function (button) {
+                button.disabled = disabled;
+            });
+            clearButtons.forEach(function (button) {
+                button.disabled = disabled || cartState.items.length === 0;
+            });
+            cartList.querySelectorAll('[data-cart-action]').forEach(function (button) {
+                const item = cartState.items.find(function (entry) {
+                    return String(entry.id) === button.dataset.itemId;
+                });
+                button.disabled = disabled || (
+                    button.dataset.cartAction === 'increase' && item && item.quantity >= 10
+                );
+            });
+        }
+
+        async function sendCartRequest(url, values) {
+            if (cartRequestPending) return;
+            cartRequestPending = true;
+            setCartControlsDisabled(true);
+            cartMessage.hidden = true;
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams(values || {})
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Unable to update your cart.');
+                renderCart(result);
+            } finally {
+                cartRequestPending = false;
+                setCartControlsDisabled(false);
+            }
+        }
+
+        document.querySelectorAll('form[action*="/cart/add/"]').forEach(function (form) {
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                if (cartRequestPending) return;
+                try {
+                    await sendCartRequest(form.action, new URLSearchParams(new FormData(form)));
+                } catch (error) {
+                    cartMessage.textContent = error.message || 'Unable to update your cart.';
+                    cartMessage.hidden = false;
+                }
+            });
+        });
+
+        cartList.addEventListener('click', async function (event) {
+            const button = event.target.closest('[data-cart-action]');
+            if (!button || cartRequestPending) return;
+            const itemId = button.dataset.itemId;
+            const item = cartState.items.find(function (entry) {
+                return String(entry.id) === itemId;
+            });
+            if (!item) return;
+
+            try {
+                if (button.dataset.cartAction === 'remove') {
+                    await sendCartRequest(cartUrl(cartPanel.dataset.removeUrlTemplate, itemId));
+                    return;
+                }
+                const quantity = button.dataset.cartAction === 'increase'
+                    ? item.quantity + 1
+                    : item.quantity - 1;
+                await sendCartRequest(
+                    cartUrl(cartPanel.dataset.updateUrlTemplate, itemId),
+                    { quantity: String(quantity) }
+                );
+            } catch (error) {
+                cartMessage.textContent = error.message || 'Unable to update your cart.';
+                cartMessage.hidden = false;
+            }
+        });
+
+        clearButtons.forEach(function (button) {
+            button.addEventListener('click', async function () {
+                if (cartRequestPending) return;
+                try {
+                    await sendCartRequest(cartPanel.dataset.clearUrl);
+                } catch (error) {
+                    cartMessage.textContent = error.message || 'Unable to clear your cart.';
+                    cartMessage.hidden = false;
+                }
+            });
+        });
+
+        toggleButton.addEventListener('click', function () {
+            if (smallCartScreen.matches) setCartExpanded(!cartExpanded);
+        });
+        smallCartScreen.addEventListener('change', function (event) {
+            setCartExpanded(!event.matches);
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && smallCartScreen.matches && cartExpanded) {
+                setCartExpanded(false);
+                toggleButton.focus();
+            }
+        });
+
+        setCartExpanded(!smallCartScreen.matches);
+        renderCart(cartState);
+    })();
 </script>
 {% endblock %}

@@ -1208,7 +1208,8 @@ def register_routes(app):
             items=items,
             categories=categories,
             selected_category=category_id,
-            search_query=search_query
+            search_query=search_query,
+            cart_summary=build_cart_summary()
         )
 
     @app.route("/menu/<int:item_id>")
@@ -1219,6 +1220,43 @@ def register_routes(app):
     # ─────────────────────────────────────────────
     # CART  (students only for placing orders)
     # ─────────────────────────────────────────────
+
+    def build_cart_summary():
+        cart_data = session.get("cart", {})
+        items = []
+        total = 0
+        count = 0
+
+        for item_id, quantity in cart_data.items():
+            try:
+                item_id = int(item_id)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(quantity, int) or not 1 <= quantity <= 10:
+                continue
+            item = db.session.get(MenuItem, item_id)
+            if item and item.is_available:
+                subtotal = round(item.price * quantity, 2)
+                items.append({
+                    "id": item.id,
+                    "name": item.name,
+                    "quantity": quantity,
+                    "subtotal": subtotal,
+                    "unit_price": item.price,
+                })
+                total += subtotal
+                count += quantity
+
+        return {"items": items, "total": round(total, 2), "count": count}
+
+    def cart_json_response(message=None, status=200):
+        response = build_cart_summary()
+        if message:
+            response["message"] = message
+        return jsonify(response), status
+
+    def wants_cart_json():
+        return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     @app.route("/cart")
     def cart():
@@ -1241,48 +1279,71 @@ def register_routes(app):
         menu_url = url_for("menu", category=request.args.get("category"), q=request.args.get("q"))
 
         if not item.is_available:
+            if wants_cart_json():
+                return jsonify(error="This item is currently unavailable."), 400
             flash("This item is currently unavailable.", "danger")
             return redirect(menu_url)
 
         quantity = request.form.get("quantity", 1, type=int)
         if quantity is None or not 1 <= quantity <= 10:
+            if wants_cart_json():
+                return jsonify(error="Choose a quantity from 1 to 10."), 400
             flash("Choose a quantity from 1 to 10.", "danger")
             return redirect(menu_url)
         cart_data = session.get("cart", {})
         cart_data[str(item_id)] = min(10, cart_data.get(str(item_id), 0) + quantity)
         session["cart"] = cart_data
 
+        if wants_cart_json():
+            return cart_json_response(f"{item.name} added to cart.")
         flash(f"{item.name} added to cart!", "success")
         return redirect(menu_url)
 
     @app.route("/cart/update/<int:item_id>", methods=["POST"])
     def update_cart(item_id):
-        quantity = request.form.get("quantity", 0, type=int)
-        if quantity is None or quantity > 10:
+        try:
+            quantity = int(request.form.get("quantity", "0"))
+        except (TypeError, ValueError):
+            quantity = -1
+        if quantity < 0 or quantity > 10:
+            if wants_cart_json():
+                return jsonify(error="Choose a quantity from 1 to 10."), 400
             flash("Choose a quantity from 1 to 10.", "danger")
             return redirect(url_for("cart"))
         cart_data = session.get("cart", {})
 
         if quantity > 0:
+            item = db.session.get(MenuItem, item_id)
+            if not item or not item.is_available:
+                if wants_cart_json():
+                    return jsonify(error="This item is currently unavailable."), 400
+                flash("This item is currently unavailable.", "danger")
+                return redirect(url_for("cart"))
             cart_data[str(item_id)] = quantity
         else:
             cart_data.pop(str(item_id), None)
 
         session["cart"] = cart_data
+        if wants_cart_json():
+            return cart_json_response("Cart updated.")
         flash("Cart updated.", "success")
         return redirect(url_for("cart"))
 
-    @app.route("/cart/remove/<int:item_id>")
+    @app.route("/cart/remove/<int:item_id>", methods=["POST"])
     def remove_from_cart(item_id):
         cart_data = session.get("cart", {})
         cart_data.pop(str(item_id), None)
         session["cart"] = cart_data
+        if wants_cart_json():
+            return cart_json_response("Item removed from cart.")
         flash("Item removed from cart.", "info")
         return redirect(url_for("cart"))
 
-    @app.route("/cart/clear")
+    @app.route("/cart/clear", methods=["POST"])
     def clear_cart():
         session.pop("cart", None)
+        if wants_cart_json():
+            return cart_json_response("Cart cleared.")
         flash("Cart cleared.", "info")
         return redirect(url_for("cart"))
 
