@@ -34,11 +34,19 @@
                             </form>
                         </div>
                         <div class="col-md-2 text-end"><span class="fw-bold">${{ "%.2f"|format(cart_item.subtotal) }}</span></div>
-                        <div class="col-md-2 text-end"><a href="{{ url_for('remove_from_cart', item_id=cart_item.item.id) }}" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></a></div>
+                        <div class="col-md-2 text-end">
+                            <form action="{{ url_for('remove_from_cart', item_id=cart_item.item.id) }}" method="post">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Remove {{ cart_item.item.name }} from cart"><i class="fas fa-trash" aria-hidden="true"></i></button>
+                            </form>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
-                <div class="card-footer bg-white"><a href="{{ url_for('clear_cart') }}" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i> Clear Cart</a></div>
+                <div class="card-footer bg-white">
+                    <form action="{{ url_for('clear_cart') }}" method="post">
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1" aria-hidden="true"></i>Clear Cart</button>
+                    </form>
+                </div>
             </div>
         </div>
         <div class="col-lg-4">
