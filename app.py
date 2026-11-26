@@ -193,9 +193,8 @@ def register_routes(app):
     def send_2fa_email(email, code, purpose="verify your account"):
         """Send 2FA verification code via email."""
         if not app.config.get("MAIL_USERNAME") or not app.config.get("MAIL_PASSWORD"):
-            app.logger.warning("Email credentials are not configured; dropping 2FA email and printing code to console.")
-            print(f"[2FA DEBUG] Send code to {email}: {code}")
-            return True
+            app.logger.error("Email credentials are not configured for verification emails.")
+            return False
 
         msg = Message(
             subject="Your MSU Canteen Account Verification Code",
@@ -216,19 +215,17 @@ def register_routes(app):
     def start_2fa(student, purpose, message, **extra_session_data):
         """Start an email 2FA challenge for a specific purpose."""
         code = f"{secrets.randbelow(1_000_000):06d}"
+        if not send_2fa_email(student.email, code, message.lower()):
+            return False
+
         session['2fa_code'] = email_code_digest(code, student.id, purpose)
         session['2fa_purpose'] = purpose
         session['pending_user_id'] = student.id
         for key, value in extra_session_data.items():
             session[key] = value
 
-        if not send_2fa_email(student.email, code, message.lower()):
-            session.pop('2fa_code', None)
-            session.pop('2fa_purpose', None)
-            session.pop('pending_user_id', None)
-            for key in extra_session_data:
-                session.pop(key, None)
-            return False
+        if purpose == "registration":
+            session["registration_code_sent_at"] = int(datetime.now(TICKET_TIMEZONE).timestamp())
         return True
 
     def is_stale_login(student):
@@ -413,6 +410,20 @@ def register_routes(app):
             return redirect(url_for("register"))
 
         if request.method == "POST":
+            if purpose == "registration" and request.form.get("action") == "resend":
+                student = db.session.get(Student, session["pending_user_id"])
+                seconds_since_send = int(datetime.now(TICKET_TIMEZONE).timestamp()) - session.get("registration_code_sent_at", 0)
+                if not student or student.is_verified:
+                    flash("Please sign in to continue.", "warning")
+                    return redirect(url_for("login"))
+                if seconds_since_send < 60:
+                    flash("Please wait one minute before requesting another code.", "warning")
+                elif start_2fa(student, "registration", "complete your registration"):
+                    flash("A new verification code was sent to your email.", "success")
+                else:
+                    flash("Unable to send a new code right now. Please try again later.", "danger")
+                return redirect(url_for("verify_2fa"))
+
             entered_code = request.form.get("code")
             if entered_code and secrets.compare_digest(
                 email_code_digest(entered_code, session['pending_user_id'], purpose), session['2fa_code']
@@ -458,6 +469,7 @@ def register_routes(app):
                     session.pop('2fa_code', None)
                     session.pop('pending_user_id', None)
                     session.pop('2fa_purpose', None)
+                    session.pop('registration_code_sent_at', None)
                     session.pop('pending_payment_method', None)
                     session.pop('pending_order_cart', None)
                     flash(success_message, "success")
