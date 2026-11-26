@@ -1,7 +1,7 @@
 # Password Reset System Redesign - Implementation Summary
 
 ## Overview
-The password reset system has been successfully redesigned to use OTP (One-Time Password) verification with enhanced security. Instead of sending a password reset link via email, the system now requires students to provide their Student ID, Email, and Phone Number, and then sends an OTP code for password verification.
+The password reset system has been successfully redesigned to use OTP (One-Time Password) verification with enhanced security. Instead of sending a password reset link via email or requiring multiple student IDs, the system allows users (students, visitors, and staff) to request a reset using only their registered Email Address, which receives a 6-digit OTP code for verification.
 
 ## Changes Made
 
@@ -19,14 +19,12 @@ The application automatically adds these columns to the existing `password_reset
 
 #### `forgot_password.html` (Updated)
 **New Fields:**
-- Student ID (text input)
 - Email Address (email input)
-- Phone Number (tel input)
 - Button: "Send OTP" (instead of "Send Reset Link")
 
 **Functionality:**
-- Collects three pieces of information for verification
-- All three fields are required
+- Collects the registered Email address
+- Works seamlessly for students and visitors without requiring a Student Reg Number
 - Submit button sends the form to the `/forgot-password` POST endpoint
 
 #### `verify_otp_password_reset.html` (New)
@@ -41,10 +39,10 @@ The application automatically adds these columns to the existing `password_reset
 ### 3. Backend Route Changes (`app.py`)
 
 #### `/forgot-password` Route (Updated)
-**Request:** POST with student_id, email, phone
+**Request:** POST with email
 **Process:**
-1. Validates all three fields are provided
-2. Queries database for a student matching all three credentials
+1. Validates email is provided
+2. Queries database for an account matching the email address
 3. If student found:
    - Generates a 6-digit OTP code
    - Creates a new `PasswordResetToken` with:

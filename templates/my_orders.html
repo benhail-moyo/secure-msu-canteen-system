@@ -55,7 +55,7 @@
                         <td class="text-nowrap fw-semibold">${{ "%.2f"|format(order.total_amount) }}</td>
                         <td><span class="badge rounded-pill bg-{% if order.status == 'pending' %}secondary{% elif order.status == 'confirmed' %}info{% elif order.status == 'preparing' %}warning{% elif order.status == 'ready' %}success{% elif order.status == 'completed' %}primary{% elif order.status == 'cancelled' %}danger{% else %}secondary{% endif %}">{{ order.status|title }}</span></td>
                         <td class="text-end text-nowrap">
-                            {% if current_user.role == 'student' %}
+                            {% if current_user.role in ['student', 'visitor'] %}
                             <a href="{{ url_for('order_confirmation', order_id=order.id) }}" class="btn btn-outline-success btn-sm" aria-label="View ticket for order {{ order.order_number }}">
                                 <i class="fas fa-ticket me-1" aria-hidden="true"></i>View ticket
                             </a>

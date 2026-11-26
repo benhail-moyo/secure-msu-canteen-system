@@ -7,22 +7,47 @@
             <div class="card border-0 shadow">
                 <div class="card-body p-5">
                     <h2 class="text-center mb-4"><i class="fas fa-user-plus text-primary me-2"></i>Register</h2>
-                    <form method="POST" data-password-strength>
+
+                    <!-- Account Type Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold d-block text-muted small text-uppercase">Account Type</label>
+                        <div class="btn-group w-100" role="group" aria-label="Account Type">
+                            <input type="radio" class="btn-check" name="account_type" id="type_student" value="student" form="registerForm"
+                                   {% if request.form.get('account_type', 'student') == 'student' %}checked{% endif %} autocomplete="off">
+                            <label class="btn btn-outline-primary" for="type_student">
+                                <i class="fas fa-user-graduate me-1"></i> Student Account
+                            </label>
+
+                            <input type="radio" class="btn-check" name="account_type" id="type_visitor" value="visitor" form="registerForm"
+                                   {% if request.form.get('account_type') == 'visitor' %}checked{% endif %} autocomplete="off">
+                            <label class="btn btn-outline-primary" for="type_visitor">
+                                <i class="fas fa-user me-1"></i> Visitor / Guest Account
+                            </label>
+                        </div>
+                    </div>
+
+                    <form method="POST" id="registerForm" data-password-strength>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="student_id" class="form-label">Student ID</label>
-                                <input type="text" class="form-control" id="student_id" name="student_id" value="{{ request.form.get('student_id', '') }}" required>
+                            <div class="col-md-6 mb-3" id="student_id_group">
+                                <label for="student_id" class="form-label" id="student_id_label">Student ID</label>
+                                <input type="text" class="form-control" id="student_id" name="student_id"
+                                       value="{{ request.form.get('student_id', '') }}"
+                                       placeholder="e.g. R210001X" required>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-6 mb-3" id="name_group">
                                 <label for="name" class="form-label">Full Name</label>
-                                <input type="text" class="form-control" id="name" name="name" value="{{ request.form.get('name', '') }}" required>
+                                <input type="text" class="form-control" id="name" name="name"
+                                       value="{{ request.form.get('name', '') }}" placeholder="e.g. Jane Doe" required>
                             </div>
                         </div>
+
                         <div class="mb-3">
-                            <label for="email" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="email" name="email" value="{{ request.form.get('email', '') }}" required>
-                            <small class="text-muted">Use your MSU email (e.g., student@msu.ac.zw)</small>
+                            <label for="email" class="form-label" id="email_label">Email Address</label>
+                            <input type="email" class="form-control" id="email" name="email"
+                                   value="{{ request.form.get('email', '') }}" required>
+                            <small class="text-muted" id="email_help">Use your MSU student email (e.g., student@msu.ac.zw)</small>
                         </div>
+
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="password" class="form-label">Password</label>
@@ -50,18 +75,23 @@
                                 <input type="password" class="form-control" id="confirm_password" name="confirm_password" required autocomplete="new-password">
                             </div>
                         </div>
+
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="department" class="form-label">Department</label>
-                                <input type="text" class="form-control" id="department" name="department" value="{{ request.form.get('department', '') }}">
+                                <label for="department" class="form-label" id="department_label">Department</label>
+                                <input type="text" class="form-control" id="department" name="department"
+                                       value="{{ request.form.get('department', '') }}" placeholder="e.g. Information Systems">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="phone" class="form-label">Phone Number</label>
-                                <input type="tel" class="form-control" id="phone" name="phone" value="{{ request.form.get('phone', '') }}">
+                                <input type="tel" class="form-control" id="phone" name="phone"
+                                       value="{{ request.form.get('phone', '') }}" placeholder="e.g. 0712345678">
                             </div>
                         </div>
+
                         <button type="submit" class="btn btn-primary w-100"><i class="fas fa-user-plus me-2"></i>Register</button>
                     </form>
+
                     <hr>
                     <p class="text-center mb-0">Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
                 </div>
@@ -69,4 +99,71 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const typeStudent = document.getElementById("type_student");
+    const typeVisitor = document.getElementById("type_visitor");
+    const studentIdGroup = document.getElementById("student_id_group");
+    const studentIdInput = document.getElementById("student_id");
+    const nameGroup = document.getElementById("name_group");
+    const emailHelp = document.getElementById("email_help");
+    const emailInput = document.getElementById("email");
+    const departmentLabel = document.getElementById("department_label");
+    const departmentInput = document.getElementById("department");
+
+    function updateFormForAccountType() {
+        if (typeVisitor && typeVisitor.checked) {
+            // Visitor mode
+            if (studentIdGroup) studentIdGroup.style.display = "none";
+            if (studentIdInput) {
+                studentIdInput.removeAttribute("required");
+                studentIdInput.value = "";
+            }
+            if (nameGroup) {
+                nameGroup.classList.remove("col-md-6");
+                nameGroup.classList.add("col-12");
+            }
+            if (emailHelp) {
+                emailHelp.textContent = "Use your personal email address (e.g. yourname@gmail.com)";
+            }
+            if (emailInput) {
+                emailInput.placeholder = "e.g. visitor@gmail.com";
+            }
+            if (departmentLabel) {
+                departmentLabel.textContent = "Organization / Affiliation (Optional)";
+            }
+            if (departmentInput) {
+                departmentInput.placeholder = "e.g. Guest / Company name";
+            }
+        } else {
+            // Student mode
+            if (studentIdGroup) studentIdGroup.style.display = "block";
+            if (studentIdInput) {
+                studentIdInput.setAttribute("required", "required");
+            }
+            if (nameGroup) {
+                nameGroup.classList.remove("col-12");
+                nameGroup.classList.add("col-md-6");
+            }
+            if (emailHelp) {
+                emailHelp.textContent = "Use your MSU student email (e.g., student@msu.ac.zw)";
+            }
+            if (emailInput) {
+                emailInput.placeholder = "e.g. student@msu.ac.zw";
+            }
+            if (departmentLabel) {
+                departmentLabel.textContent = "Department";
+            }
+            if (departmentInput) {
+                departmentInput.placeholder = "e.g. Information Systems";
+            }
+        }
+    }
+
+    if (typeStudent) typeStudent.addEventListener("change", updateFormForAccountType);
+    if (typeVisitor) typeVisitor.addEventListener("change", updateFormForAccountType);
+    updateFormForAccountType();
+});
+</script>
 {% endblock %}

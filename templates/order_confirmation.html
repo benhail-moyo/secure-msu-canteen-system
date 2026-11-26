@@ -9,7 +9,7 @@
     </div>
 
     <section class="meal-ticket mx-auto" aria-label="Meal ticket">
-        {% if current_user.role == 'student' and signed_ticket %}
+        {% if current_user.role in ['student', 'visitor'] and signed_ticket %}
         <div class="meal-ticket-codes">
             <div id="ticket-qr" class="ticket-qr" role="img" aria-label="Signed meal ticket QR code"></div>
             <svg id="ticket-barcode" class="ticket-barcode" role="img" aria-label="Ticket code barcode"></svg>
@@ -33,9 +33,9 @@
                     <div class="ticket-meta">
                         <div><span class="ticket-label">Date</span><strong>{{ order.created_at.strftime('%d %b %Y, %I:%M %p') }}</strong></div>
                         <div><span class="ticket-label">Total</span><strong>${{ "%.2f"|format(order.total_amount) }}</strong></div>
-                        {% if current_user.role == 'student' and signed_ticket %}
+                        {% if current_user.role in ['student', 'visitor'] and signed_ticket %}
                         <div><span class="ticket-label">Ticket code</span><strong>{{ order.ticket_code }}</strong></div>
-                        <div><span class="ticket-label">Registration</span><strong>{{ current_user.student_id }}</strong></div>
+                        <div><span class="ticket-label">{% if current_user.role == "visitor" %}Visitor ID{% else %}Registration{% endif %}</span><strong>{{ current_user.student_id }}</strong></div>
                         <div class="ticket-expiry"><span class="ticket-label">Expires</span><strong>{{ expires_at.strftime('%d %b %Y at %H:%M') }} (Zimbabwe time)</strong></div>
                         {% endif %}
                     </div>
@@ -48,7 +48,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                    {% if current_user.role == 'student' and signed_ticket %}
+                    {% if current_user.role in ['student', 'visitor'] and signed_ticket %}
                     <p class="small text-muted mt-2 mb-2">Show the QR code or barcode to staff. This ticket can be collected once.</p>
                     <button type="button" id="download-ticket" class="btn btn-success btn-sm" disabled><i class="fas fa-download me-2"></i>Download ticket (PNG)</button>
                     {% endif %}
@@ -75,7 +75,7 @@ if (ticketOrderDetails) {
     smallTicketScreen.addEventListener('change', syncTicketDetails);
 }
 </script>
-{% if current_user.role == 'student' and signed_ticket %}
+{% if current_user.role in ['student', 'visitor'] and signed_ticket %}
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.1/dist/JsBarcode.all.min.js"></script>
 <script>
