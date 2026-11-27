@@ -1019,14 +1019,56 @@ def register_routes(app):
     @app.route("/orders")
     @login_required
     def my_orders():
-        if current_user.role == "student":
-            orders = Order.query.filter_by(
-                student_id=current_user.id
-            ).order_by(Order.created_at.desc()).all()
-        else:
-            orders = Order.query.order_by(Order.created_at.desc()).all()
+        if current_user.role != "student":
+            flash("Order history is available to students only.", "warning")
+            return redirect_user_by_role(current_user)
 
-        return render_template("my_orders.html", orders=orders)
+        orders = Order.query.filter_by(
+            student_id=current_user.id
+        ).order_by(Order.created_at.desc()).all()
+        active_statuses = {"pending", "confirmed", "preparing", "ready"}
+        active_orders = [order for order in orders if order.status in active_statuses]
+        past_orders = [order for order in orders if order.status not in active_statuses]
+
+        return render_template(
+            "my_orders.html", active_orders=active_orders, past_orders=past_orders
+        )
+
+    @app.route("/order/<int:order_id>/reorder", methods=["POST"])
+    @login_required
+    def reorder(order_id):
+        if current_user.role != "student":
+            flash("Only students can reorder meals.", "danger")
+            return redirect_user_by_role(current_user)
+
+        order = Order.query.get_or_404(order_id)
+        if order.student_id != current_user.id:
+            flash("Access denied.", "danger")
+            return redirect(url_for("my_orders"))
+
+        cart_data = session.get("cart", {})
+        added_count = 0
+        unavailable_names = []
+        for ordered_item in order.items:
+            item = ordered_item.menu_item
+            if not item or not item.is_available:
+                unavailable_names.append(item.name if item else "An unavailable item")
+                continue
+            cart_key = str(item.id)
+            cart_data[cart_key] = cart_data.get(cart_key, 0) + ordered_item.quantity
+            added_count += 1
+
+        if added_count:
+            session["cart"] = cart_data
+            flash("Available items from this order were added to your cart.", "success")
+        if unavailable_names:
+            flash(
+                "Unavailable items were skipped: " + ", ".join(unavailable_names),
+                "warning"
+            )
+        if not added_count and not unavailable_names:
+            flash("This order has no items to reorder.", "warning")
+        return redirect(url_for("cart"))
 
     @app.route("/order/<int:order_id>/status")
     @login_required
@@ -1044,6 +1086,30 @@ def register_routes(app):
                 if order.estimated_ready_time else None
             )
         })
+
+    @app.route("/staff/order/<int:order_id>/status", methods=["POST"])
+    @login_required
+    def advance_order_status(order_id):
+        if current_user.role not in {"staff", "manager"}:
+            flash("Only staff can update order status.", "danger")
+            return redirect_user_by_role(current_user)
+
+        order = Order.query.get_or_404(order_id)
+        next_status = {
+            "pending": "preparing",
+            "confirmed": "preparing",
+            "preparing": "ready",
+            "ready": "completed",
+        }.get(order.status)
+        if not next_status:
+            flash("This order cannot be advanced further.", "warning")
+        else:
+            order.status = next_status
+            db.session.commit()
+            flash(f"Order {order.order_number} marked {next_status}.", "success")
+
+        dashboard = "manager_dashboard" if current_user.role == "manager" else "staff_dashboard"
+        return redirect(url_for(dashboard))
 
     @app.route("/order/<int:order_id>/feedback", methods=["GET", "POST"])
     @login_required

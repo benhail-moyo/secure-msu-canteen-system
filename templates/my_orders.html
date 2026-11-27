@@ -2,48 +2,136 @@
 {% block title %}My Orders - MSU Canteen{% endblock %}
 {% block content %}
 <div class="container py-5">
-    <h1 class="mb-4"><i class="fas fa-list me-2"></i>My Orders</h1>
-    {% if orders %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+        <div>
+            <h1 class="mb-1"><i class="fas fa-list me-2"></i>Order History</h1>
+            <p class="text-muted mb-0">Track active orders and quickly reorder past meals.</p>
+        </div>
+        <a href="{{ url_for('menu') }}" class="btn btn-outline-primary"><i class="fas fa-utensils me-2"></i>Browse Menu</a>
+    </div>
+
+    <h2 class="h4 mb-3"><i class="fas fa-location-dot me-2 text-success"></i>Active Orders</h2>
+    {% if active_orders %}
     <div class="row">
-        {% for order in orders %}
-        <div class="col-md-6 mb-4">
-            <div class="card border-0 shadow">
-                <div class="card-header bg-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Order #{{ order.order_number }}</h5>
-                        {% if order.status == 'pending' %}<span class="badge bg-secondary">{{ order.status|title }}</span>
-                        {% elif order.status == 'confirmed' %}<span class="badge bg-info">{{ order.status|title }}</span>
-                        {% elif order.status == 'preparing' %}<span class="badge bg-warning">{{ order.status|title }}</span>
-                        {% elif order.status == 'ready' %}<span class="badge bg-success">{{ order.status|title }}</span>
-                        {% elif order.status == 'completed' %}<span class="badge bg-primary">{{ order.status|title }}</span>
-                        {% elif order.status == 'cancelled' %}<span class="badge bg-danger">{{ order.status|title }}</span>{% endif %}
-                    </div>
+        {% for order in active_orders %}
+        <div class="col-lg-6 mb-4 order-card" data-status-url="{{ url_for('order_status', order_id=order.id) }}">
+            <div class="card border-0 shadow h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Order #{{ order.order_number }}</h5>
+                    <span class="badge bg-warning text-dark order-status">{{ order.status|title }}</span>
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-1"><i class="fas fa-calendar me-2"></i>{{ order.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                    <p class="text-muted mb-1"><i class="fas fa-clock me-2"></i>Est. ready: {{ order.estimated_ready_time.strftime('%I:%M %p') if order.estimated_ready_time else 'N/A' }}</p>
+                    <p class="text-muted mb-3"><i class="fas fa-clock me-2"></i>Est. ready: <span class="estimated-ready">{{ order.estimated_ready_time.strftime('%I:%M %p') if order.estimated_ready_time else 'N/A' }}</span></p>
+                    <div class="d-flex justify-content-between small text-center mb-4 order-progress" data-current-status="{{ order.status }}">
+                        {% for step, label in [('pending', 'Pending'), ('preparing', 'Preparing'), ('ready', 'Ready'), ('completed', 'Collected')] %}
+                        <div class="flex-fill progress-step {% if order.status == step or (order.status == 'confirmed' and step == 'preparing') %}active{% endif %}" data-step="{{ step }}">
+                            <span class="d-block rounded-pill border mx-auto mb-1" style="width: 1rem; height: 1rem;"></span>{{ label }}
+                        </div>
+                        {% endfor %}
+                    </div>
                     <p class="mb-3"><i class="fas fa-dollar-sign me-2"></i>Total: <strong>${{ "%.2f"|format(order.total_amount) }}</strong></p>
                     <h6>Items:</h6>
                     <ul class="list-group mb-3">
                         {% for item in order.items %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center py-1">{{ item.menu_item.name }}<span class="badge bg-primary rounded-pill">x{{ item.quantity }}</span></li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                            <span>{{ item.menu_item.name if item.menu_item else 'Unavailable item' }} <small class="text-muted">${{ "%.2f"|format(item.unit_price) }} each</small></span>
+                            <span class="badge bg-primary rounded-pill">x{{ item.quantity }}</span>
+                        </li>
                         {% endfor %}
                     </ul>
-                    {% if order.status == 'completed' and not order.feedback %}
-                    <a href="{{ url_for('submit_feedback', order_id=order.id) }}" class="btn btn-outline-primary btn-sm"><i class="fas fa-star me-1"></i>Leave Feedback</a>
-                    {% elif order.feedback %}<span class="badge bg-success"><i class="fas fa-check me-1"></i>Feedback Submitted</span>{% endif %}
+                    <a href="{{ url_for('order_confirmation', order_id=order.id) }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-receipt me-1"></i>View / Print Receipt</a>
                 </div>
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="text-center py-5">
-        <i class="fas fa-receipt fa-5x text-muted mb-4"></i>
-        <h3>No orders yet</h3>
-        <p class="text-muted">Start ordering your favorite meals!</p>
-        <a href="{{ url_for('menu') }}" class="btn btn-primary btn-lg"><i class="fas fa-utensils me-2"></i>Browse Menu</a>
+    <div class="alert alert-light border mb-5">You have no active orders right now.</div>
+    {% endif %}
+
+    <h2 class="h4 mt-4 mb-3"><i class="fas fa-clock-rotate-left me-2 text-secondary"></i>Past Orders</h2>
+    {% if past_orders %}
+    <div class="row">
+        {% for order in past_orders %}
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Order #{{ order.order_number }}</h5>
+                    <span class="badge bg-{% if order.status == 'completed' %}success{% elif order.status == 'cancelled' %}danger{% else %}secondary{% endif %}">{{ 'Collected' if order.status == 'completed' else order.status|title }}</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-1"><i class="fas fa-calendar me-2"></i>{{ order.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                    <p class="mb-3"><i class="fas fa-dollar-sign me-2"></i>Total: <strong>${{ "%.2f"|format(order.total_amount) }}</strong></p>
+                    <h6>Items ordered:</h6>
+                    <ul class="list-group mb-3">
+                        {% for item in order.items %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                            <span>{{ item.menu_item.name if item.menu_item else 'Unavailable item' }} <small class="text-muted">${{ "%.2f"|format(item.unit_price) }} each</small></span>
+                            <span class="badge bg-primary rounded-pill">x{{ item.quantity }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ url_for('order_confirmation', order_id=order.id) }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-receipt me-1"></i>Reissue Receipt</a>
+                        <form method="POST" action="{{ url_for('reorder', order_id=order.id) }}">
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-rotate-right me-1"></i>Reorder</button>
+                        </form>
+                        {% if order.status == 'completed' and not order.feedback %}
+                        <a href="{{ url_for('submit_feedback', order_id=order.id) }}" class="btn btn-outline-primary btn-sm"><i class="fas fa-star me-1"></i>Leave Feedback</a>
+                        {% elif order.feedback %}<span class="badge bg-success align-self-center"><i class="fas fa-check me-1"></i>Feedback Submitted</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-4">
+        <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+        <h3 class="h5">No past orders yet</h3>
+        <p class="text-muted">Your completed orders will appear here.</p>
     </div>
     {% endif %}
 </div>
+
+<style>
+    .progress-step { color: #6c757d; }
+    .progress-step.active { color: #198754; font-weight: 600; }
+    .progress-step.active span { background: #198754; border-color: #198754 !important; }
+</style>
+<script>
+    (() => {
+        const labels = { pending: 'Pending', confirmed: 'Confirmed', preparing: 'Preparing in Kitchen', ready: 'Ready for Collection', completed: 'Collected', cancelled: 'Cancelled' };
+        const stages = ['pending', 'preparing', 'ready', 'completed'];
+
+        async function refreshOrder(card) {
+            try {
+                const response = await fetch(card.dataset.statusUrl, { headers: { 'Accept': 'application/json' } });
+                if (!response.ok) return;
+                const order = await response.json();
+                if (['completed', 'cancelled'].includes(order.status)) {
+                    window.location.reload();
+                    return;
+                }
+                const statusElement = card.querySelector('.order-status');
+                statusElement.textContent = labels[order.status] || order.status;
+                const readyElement = card.querySelector('.estimated-ready');
+                readyElement.textContent = order.estimated_ready_time ? new Date(order.estimated_ready_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                const progress = card.querySelector('.order-progress');
+                const current = order.status === 'confirmed' ? 'preparing' : order.status;
+                progress.dataset.currentStatus = current;
+                progress.querySelectorAll('.progress-step').forEach(step => {
+                    step.classList.toggle('active', stages.indexOf(step.dataset.step) <= stages.indexOf(current));
+                });
+            } catch (error) {
+                // Keep the last displayed status when the network is temporarily unavailable.
+            }
+        }
+
+        const cards = document.querySelectorAll('.order-card');
+        cards.forEach(refreshOrder);
+        if (cards.length) window.setInterval(() => cards.forEach(refreshOrder), 10000);
+    })();
+</script>
 {% endblock %}

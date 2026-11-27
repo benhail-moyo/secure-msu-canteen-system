@@ -6,7 +6,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-1"><i class="fas fa-utensils text-warning me-2"></i>Staff Dashboard</h2>
-            <p class="text-muted mb-0">Welcome back, {{ current_user.email }}</p>
+            <p class="text-muted mb-0">Welcome back, {{ current_user.email }}. Update order stages as meals are prepared and collected.</p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ url_for('menu') }}" class="btn btn-primary">
@@ -44,11 +44,11 @@
                                     {% if order.status == 'pending' %}
                                         <span class="badge bg-warning text-dark">Pending</span>
                                     {% elif order.status == 'preparing' %}
-                                        <span class="badge bg-info">Preparing</span>
+                                        <span class="badge bg-info">Preparing in Kitchen</span>
                                     {% elif order.status == 'ready' %}
-                                        <span class="badge bg-primary">Ready</span>
+                                        <span class="badge bg-primary">Ready for Collection</span>
                                     {% elif order.status == 'completed' %}
-                                        <span class="badge bg-success">Completed</span>
+                                        <span class="badge bg-success">Collected</span>
                                     {% else %}
                                         <span class="badge bg-secondary">{{ order.status }}</span>
                                     {% endif %}
@@ -60,6 +60,13 @@
                                        class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i> View
                                     </a>
+                                    {% if order.status in ['pending', 'confirmed', 'preparing', 'ready'] %}
+                                    <form method="POST" action="{{ url_for('advance_order_status', order_id=order.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            <i class="fas fa-arrow-right me-1"></i>{{ 'Start Preparing' if order.status in ['pending', 'confirmed'] else ('Mark Ready' if order.status == 'preparing' else 'Mark Collected') }}
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}

@@ -50,4 +50,4 @@ config = {
     "production": ProductionConfig,
     "testing": TestingConfig,
     "default": DevelopmentConfig
-}
+}                                                                                              
